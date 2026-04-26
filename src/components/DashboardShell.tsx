@@ -51,15 +51,13 @@ export function DashboardShell({
 
   if (!user) return null;
 
-  const sideClass =
-    "flex w-72 shrink-0 flex-col border-border bg-sidebar p-5 " +
-    (dir === "rtl" ? "border-l" : "border-r");
+  const sideBorder = dir === "rtl" ? "border-l" : "border-r";
 
   return (
     <div className="min-h-screen bg-background">
       <div className="flex min-h-screen">
         {/* Desktop sidebar */}
-        <aside className={`hidden lg:${sideClass.replace("flex ", "flex ")}`}>
+        <aside className={`hidden lg:flex w-72 shrink-0 flex-col bg-sidebar p-5 ${sideBorder} border-border`}>
           <SidebarInner items={items} user={user} onLogout={onLogout} />
         </aside>
 
@@ -68,7 +66,7 @@ export function DashboardShell({
           <div className="fixed inset-0 z-50 lg:hidden">
             <div className="absolute inset-0 bg-foreground/40" onClick={() => setOpen(false)} />
             <aside
-              className={`absolute top-0 ${dir === "rtl" ? "right-0" : "left-0"} h-full ${sideClass}`}
+              className={`absolute top-0 ${dir === "rtl" ? "right-0" : "left-0"} flex h-full w-72 shrink-0 flex-col bg-sidebar p-5 ${sideBorder} border-border`}
             >
               <SidebarInner items={items} user={user} onLogout={onLogout} />
             </aside>

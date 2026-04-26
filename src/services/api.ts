@@ -203,11 +203,23 @@ export async function login(email: string, password: string): Promise<AuthUser> 
 
   await delay(500);
   const e = email.trim().toLowerCase();
-  if (e === "admin@aib.com") {
+  if (e === "admin@aib.com" || e === "admin@aib.local") {
     const u: AuthUser = { id: "U1", email: e, name: "Admin User", role: "admin" };
     localStorage.setItem(STORAGE.user, JSON.stringify(u));
     return u;
   }
+  // Match against mock agents directory (created via /admin/agents)
+  const directory = loadMockAgents();
+  const match = directory.find((a) => a.email?.toLowerCase() === e && a.active);
+  if (match) {
+    const u: AuthUser = {
+      id: match.userId ?? `U-${match.id}`, email: e, name: match.name,
+      role: "agent", agentId: match.id, branch: match.branch,
+    };
+    localStorage.setItem(STORAGE.user, JSON.stringify(u));
+    return u;
+  }
+  // Legacy demo fallback
   if (e === "agent@aib.com" || e.endsWith("@aib.com")) {
     const u: AuthUser = {
       id: "U2", email: e, name: "Ahmed Al Mansouri",

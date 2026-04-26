@@ -1,19 +1,30 @@
 /**
- * Mock API service layer.
+ * API service layer.
  *
- * IMPORTANT: All UI calls go through this module. To switch to a real REST
- * backend later, replace the function bodies with `fetch(...)` calls — the
- * function signatures and return shapes can stay the same.
+ * Two backends are supported via the same interface:
+ *   1. Directus REST (when VITE_DIRECTUS_URL is set)  — production
+ *   2. localStorage mock (when not set)               — demo / dev
  *
- * Suggested REST mapping (for later):
- *   POST   /api/uploads          -> submitUpload
- *   POST   /api/auth/login       -> login
- *   GET    /api/requests         -> listRequests (admin sees all, agent scoped)
- *   GET    /api/requests/:id     -> getRequest
- *   PATCH  /api/requests/:id     -> updateRequestStatus
+ * UI never imports the Directus client directly. To switch deployments,
+ * just set VITE_DIRECTUS_URL in the build environment — no UI changes needed.
+ *
+ * REST mapping (Directus):
+ *   POST   /auth/login                 -> login
+ *   GET    /users/me                   -> getCurrentUser refresh
+ *   GET    /items/requests             -> listRequests (filtered by agent for agents)
+ *   GET    /items/requests/:id         -> getRequest
+ *   PATCH  /items/requests/:id         -> updateRequestStatus
+ *   POST   /files                      -> file upload (returns file id)
+ *   POST   /items/requests             -> submitUpload (Public role)
  */
 
 import { fileToStoredDataUrl } from "@/lib/imageUtils";
+import {
+  isDirectusEnabled,
+  dxLogin, dxLogout, dxHasSession, dxAssetUrl,
+  dxListRequests, dxGetRequest, dxCreateRequest, dxUpdateRequestStatus, dxUploadFile,
+  type DxRequest,
+} from "@/services/directus";
 
 export type RequestStatus = "new" | "processing" | "sold" | "rejected" | "reupload";
 
@@ -60,6 +71,10 @@ const AGENTS = [
   { id: "A125", name: "Yousef Al Shamsi" },
 ];
 
+// =====================================================================
+// Mock helpers (used only when Directus is not configured)
+// =====================================================================
+
 function seed(): InsuranceRequest[] {
   const statuses: RequestStatus[] = ["new", "new", "processing", "sold", "rejected", "reupload", "new", "processing"];
   const now = Date.now();
@@ -94,13 +109,12 @@ function save(list: InsuranceRequest[]) {
   try {
     localStorage.setItem(STORAGE.requests, JSON.stringify(list));
   } catch {
-    // Quota exceeded — drop image payloads from older requests as a fallback.
     const trimmed = list.map((r, idx) =>
       idx < 5 ? r : { ...r, images: { registration: "", license: "", emirates: "" } },
     );
     try { localStorage.setItem(STORAGE.requests, JSON.stringify(trimmed)); } catch { /* ignore */ }
   }
-  window.dispatchEvent(new CustomEvent(CHANGE_EVENT));
+  notifyChange();
 }
 
 function nextId(): string {
@@ -113,7 +127,36 @@ function nextId(): string {
 
 const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms));
 
-// ---------- Live updates ----------
+function notifyChange() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(CHANGE_EVENT));
+}
+
+// =====================================================================
+// Directus → InsuranceRequest mapping
+// =====================================================================
+
+function mapDx(r: DxRequest): InsuranceRequest {
+  const agentMatch = AGENTS.find((a) => a.id === r.agent_id);
+  return {
+    id: r.id,
+    agentId: r.agent_id,
+    agentName: r.agent_name || agentMatch?.name || r.agent_id,
+    branch: r.branch || "—",
+    status: (r.status as RequestStatus) ?? "new",
+    createdAt: r.date_created,
+    images: {
+      registration: dxAssetUrl(r.registration),
+      license: dxAssetUrl(r.license),
+      emirates: dxAssetUrl(r.emirates),
+    },
+  };
+}
+
+// =====================================================================
+// Live updates
+// =====================================================================
+
 export function subscribeRequests(cb: () => void): () => void {
   if (typeof window === "undefined") return () => {};
   const onChange = () => cb();
@@ -122,14 +165,40 @@ export function subscribeRequests(cb: () => void): () => void {
   };
   window.addEventListener(CHANGE_EVENT, onChange);
   window.addEventListener("storage", onStorage);
+  // When Directus is enabled, lightly poll so admins see new uploads from
+  // anonymous customers (they can't dispatch our local CustomEvent).
+  let interval: ReturnType<typeof setInterval> | null = null;
+  if (isDirectusEnabled()) {
+    interval = setInterval(cb, 15000);
+  }
   return () => {
     window.removeEventListener(CHANGE_EVENT, onChange);
     window.removeEventListener("storage", onStorage);
+    if (interval) clearInterval(interval);
   };
 }
 
-// ---------- Auth ----------
-export async function login(email: string, _password: string): Promise<AuthUser> {
+// =====================================================================
+// Auth
+// =====================================================================
+
+export async function login(email: string, password: string): Promise<AuthUser> {
+  if (isDirectusEnabled()) {
+    const me = await dxLogin(email, password);
+    const roleName = (me.role?.name || "").toLowerCase();
+    const role: Role = roleName.includes("admin") ? "admin" : "agent";
+    const user: AuthUser = {
+      id: me.id,
+      email: me.email,
+      name: [me.first_name, me.last_name].filter(Boolean).join(" ") || me.email,
+      role,
+      agentId: me.agent_id,
+      branch: me.branch,
+    };
+    localStorage.setItem(STORAGE.user, JSON.stringify(user));
+    return user;
+  }
+
   await delay(500);
   const e = email.trim().toLowerCase();
   if (e === "admin@aib.com") {
@@ -139,12 +208,8 @@ export async function login(email: string, _password: string): Promise<AuthUser>
   }
   if (e === "agent@aib.com" || e.endsWith("@aib.com")) {
     const u: AuthUser = {
-      id: "U2",
-      email: e,
-      name: "Ahmed Al Mansouri",
-      role: "agent",
-      agentId: "A123",
-      branch: "Abu Dhabi",
+      id: "U2", email: e, name: "Ahmed Al Mansouri",
+      role: "agent", agentId: "A123", branch: "Abu Dhabi",
     };
     localStorage.setItem(STORAGE.user, JSON.stringify(u));
     return u;
@@ -153,29 +218,55 @@ export async function login(email: string, _password: string): Promise<AuthUser>
 }
 
 export function logout() {
-  if (typeof window !== "undefined") localStorage.removeItem(STORAGE.user);
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(STORAGE.user);
+  if (isDirectusEnabled()) dxLogout();
 }
 
 export function getCurrentUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem(STORAGE.user);
   if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+  try {
+    const u = JSON.parse(raw) as AuthUser;
+    // If Directus is enabled but the session token vanished, drop the local user too.
+    if (isDirectusEnabled() && !dxHasSession()) {
+      localStorage.removeItem(STORAGE.user);
+      return null;
+    }
+    return u;
+  } catch { return null; }
 }
 
-// ---------- Requests ----------
+// =====================================================================
+// Requests
+// =====================================================================
+
 export async function listRequests(opts?: { agentId?: string }): Promise<InsuranceRequest[]> {
+  if (isDirectusEnabled()) {
+    const rows = await dxListRequests(opts);
+    return rows.map(mapDx);
+  }
   await delay(250);
   const all = load().sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
   return opts?.agentId ? all.filter((r) => r.agentId === opts.agentId) : all;
 }
 
 export async function getRequest(id: string): Promise<InsuranceRequest | null> {
+  if (isDirectusEnabled()) {
+    const r = await dxGetRequest(id);
+    return r ? mapDx(r) : null;
+  }
   await delay(200);
   return load().find((r) => r.id === id) ?? null;
 }
 
 export async function updateRequestStatus(id: string, status: RequestStatus): Promise<InsuranceRequest> {
+  if (isDirectusEnabled()) {
+    const r = await dxUpdateRequestStatus(id, status);
+    notifyChange();
+    return mapDx(r);
+  }
   await delay(300);
   const list = load();
   const idx = list.findIndex((r) => r.id === id);
@@ -189,40 +280,72 @@ export async function submitUpload(input: {
   agentId: string;
   images: { registration: File; license: File; emirates: File };
 }): Promise<{ id: string }> {
-  // Simulate network upload time (700–1200ms).
-  await delay(700 + Math.floor(Math.random() * 500));
+  if (isDirectusEnabled()) {
+    // 1) Upload the three files in parallel — Public role can create files.
+    const [registration, license, emirates] = await Promise.all([
+      dxUploadFile(input.images.registration),
+      dxUploadFile(input.images.license),
+      dxUploadFile(input.images.emirates),
+    ]);
+    // 2) Create the request — Public role has create on `requests`.
+    const agent = AGENTS.find((a) => a.id === input.agentId);
+    const r = await dxCreateRequest({
+      agent_id: input.agentId,
+      agent_name: agent?.name,
+      branch: agent ? BRANCHES[Math.abs(hash(input.agentId)) % BRANCHES.length] : undefined,
+      registration, license, emirates,
+    });
+    notifyChange();
+    return { id: r.id };
+  }
 
+  // Mock path
+  await delay(700 + Math.floor(Math.random() * 500));
   const [registration, license, emirates] = await Promise.all([
     fileToStoredDataUrl(input.images.registration),
     fileToStoredDataUrl(input.images.license),
     fileToStoredDataUrl(input.images.emirates),
   ]);
-
   const list = load();
   const id = nextId();
   const agent = AGENTS.find((a) => a.id === input.agentId) ?? AGENTS[0];
   const newReq: InsuranceRequest = {
-    id,
-    agentId: agent.id,
-    agentName: agent.name,
+    id, agentId: agent.id, agentName: agent.name,
     branch: BRANCHES[list.length % BRANCHES.length],
-    status: "new",
-    createdAt: new Date().toISOString(),
+    status: "new", createdAt: new Date().toISOString(),
     images: { registration, license, emirates },
   };
   save([newReq, ...list]);
   return { id };
 }
 
+function hash(s: string) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return h;
+}
+
+// =====================================================================
+// Demo helpers
+// =====================================================================
+
 export function resetDemo() {
   if (typeof window === "undefined") return;
+  if (isDirectusEnabled()) {
+    // In a real Directus deployment we never wipe data from the client.
+    localStorage.removeItem(STORAGE.user);
+    dxLogout();
+    notifyChange();
+    return;
+  }
   localStorage.removeItem(STORAGE.requests);
   localStorage.removeItem(STORAGE.user);
   localStorage.removeItem(STORAGE.seq);
-  // Re-seed immediately so next read is consistent.
   load();
-  window.dispatchEvent(new CustomEvent(CHANGE_EVENT));
+  notifyChange();
 }
+
+export function isDemoMode() { return !isDirectusEnabled(); }
 
 export function listAgents() { return AGENTS; }
 export function listBranches() { return BRANCHES; }

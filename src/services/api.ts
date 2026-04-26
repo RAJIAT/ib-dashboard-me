@@ -348,5 +348,159 @@ export function resetDemo() {
 
 export function isDemoMode() { return !isDirectusEnabled(); }
 
-export function listAgents() { return AGENTS; }
+// =====================================================================
+// Agents directory (Admin manages, others read)
+// =====================================================================
+
+export type Agent = {
+  userId?: string;        // Directus user UUID (undefined in demo mode)
+  id: string;             // agent_id (business identifier used in URLs and requests)
+  name: string;
+  email?: string;
+  branch?: string;
+  active: boolean;
+};
+
+const AGENTS_CHANGE_EVENT = "aib:agents-changed";
+const MOCK_AGENTS_KEY = "aib_agents";
+
+function notifyAgentsChange() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(AGENTS_CHANGE_EVENT));
+}
+
+export function subscribeAgents(cb: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const onChange = () => cb();
+  window.addEventListener(AGENTS_CHANGE_EVENT, onChange);
+  return () => window.removeEventListener(AGENTS_CHANGE_EVENT, onChange);
+}
+
+function mapDxUser(u: DxUser): Agent {
+  return {
+    userId: u.id,
+    id: u.agent_id || u.id,
+    name: [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email,
+    email: u.email,
+    branch: u.branch,
+    active: u.status === "active",
+  };
+}
+
+function loadMockAgents(): Agent[] {
+  if (typeof window === "undefined") return AGENTS.map((a) => ({ ...a, active: true }));
+  const raw = localStorage.getItem(MOCK_AGENTS_KEY);
+  if (raw) {
+    try { return JSON.parse(raw); } catch { /* ignore */ }
+  }
+  const seeded: Agent[] = AGENTS.map((a, i) => ({
+    id: a.id, name: a.name,
+    email: `${a.id.toLowerCase()}@aib.local`,
+    branch: BRANCHES[i % BRANCHES.length],
+    active: true,
+  }));
+  localStorage.setItem(MOCK_AGENTS_KEY, JSON.stringify(seeded));
+  return seeded;
+}
+
+function saveMockAgents(list: Agent[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(MOCK_AGENTS_KEY, JSON.stringify(list));
+  notifyAgentsChange();
+}
+
+// Async source-of-truth (used by admin agents page)
+export async function getAgents(): Promise<Agent[]> {
+  if (isDirectusEnabled()) {
+    const users = await dxListAgents();
+    const list = users.map(mapDxUser);
+    cachedAgents = list;
+    return list;
+  }
+  await delay(150);
+  const list = loadMockAgents();
+  cachedAgents = list;
+  return list;
+}
+
+// Synchronous snapshot (used by filters and labels — refreshed by getAgents)
+let cachedAgents: Agent[] | null = null;
+export function listAgents(): Agent[] {
+  if (cachedAgents) return cachedAgents;
+  // Fall back to mock seed in demo, or static names so UI still labels rows
+  // before the async fetch completes in production.
+  if (typeof window !== "undefined" && !isDirectusEnabled()) {
+    cachedAgents = loadMockAgents();
+    return cachedAgents;
+  }
+  return AGENTS.map((a) => ({ id: a.id, name: a.name, active: true }));
+}
+
 export function listBranches() { return BRANCHES; }
+
+export async function createAgent(input: {
+  email: string; password: string; name: string;
+  agentId: string; branch?: string;
+}): Promise<Agent> {
+  const [first_name, ...rest] = input.name.trim().split(/\s+/);
+  const last_name = rest.join(" ");
+  if (isDirectusEnabled()) {
+    const u = await dxCreateAgent({
+      email: input.email, password: input.password,
+      first_name, last_name, agent_id: input.agentId, branch: input.branch,
+    });
+    notifyAgentsChange();
+    return mapDxUser(u);
+  }
+  await delay(300);
+  const list = loadMockAgents();
+  if (list.some((a) => a.id === input.agentId)) throw new Error("Agent ID already exists");
+  if (list.some((a) => a.email === input.email)) throw new Error("Email already exists");
+  const next: Agent = {
+    id: input.agentId, name: input.name, email: input.email,
+    branch: input.branch, active: true,
+  };
+  saveMockAgents([...list, next]);
+  return next;
+}
+
+export async function updateAgent(agent: Agent, patch: {
+  name?: string; branch?: string; active?: boolean; password?: string;
+}): Promise<Agent> {
+  if (isDirectusEnabled() && agent.userId) {
+    const [first_name, ...rest] = (patch.name ?? agent.name).trim().split(/\s+/);
+    const last_name = rest.join(" ");
+    const dxPatch: Parameters<typeof dxUpdateAgent>[1] = {};
+    if (patch.name !== undefined) { dxPatch.first_name = first_name; dxPatch.last_name = last_name; }
+    if (patch.branch !== undefined) dxPatch.branch = patch.branch || null;
+    if (patch.active !== undefined) dxPatch.status = patch.active ? "active" : "suspended";
+    if (patch.password) dxPatch.password = patch.password;
+    const u = await dxUpdateAgent(agent.userId, dxPatch);
+    notifyAgentsChange();
+    return mapDxUser(u);
+  }
+  await delay(250);
+  const list = loadMockAgents();
+  const idx = list.findIndex((a) => a.id === agent.id);
+  if (idx < 0) throw new Error("Agent not found");
+  list[idx] = {
+    ...list[idx],
+    name: patch.name ?? list[idx].name,
+    branch: patch.branch ?? list[idx].branch,
+    active: patch.active ?? list[idx].active,
+  };
+  saveMockAgents(list);
+  return list[idx];
+}
+
+export async function deleteAgent(agent: Agent): Promise<void> {
+  if (isDirectusEnabled() && agent.userId) {
+    await dxDeleteAgent(agent.userId);
+    notifyAgentsChange();
+    return;
+  }
+  await delay(200);
+  const list = loadMockAgents().filter((a) => a.id !== agent.id);
+  saveMockAgents(list);
+}
+

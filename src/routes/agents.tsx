@@ -11,7 +11,7 @@ import {
   subscribeAgents, updateAgent, type Agent,
 } from "@/services/api";
 
-export const Route = createFileRoute("/admin/agents")({
+export const Route = createFileRoute("/agents")({
   component: AdminAgents,
 });
 

@@ -28,6 +28,11 @@ function AgentDashboard() {
       return;
     }
     setUser(u);
+    // Re-verify role server-side; if tampered, send to login.
+    refreshCurrentUser().then((fresh) => {
+      if (!fresh || fresh.role !== "agent") { navigate({ to: "/login" }); return; }
+      setUser(fresh);
+    });
   }, [navigate]);
 
   const { items, loading } = useRequestsLive({ agentId: user?.agentId });

@@ -13,10 +13,13 @@ export const Route = createFileRoute("/agent")({
   component: AgentDashboard,
 });
 
+type StatusFilter = "all" | "new" | "processing" | "sold" | "rejected" | "reupload";
+
 function AgentDashboard() {
   const { t, dir, lang } = useLang();
   const navigate = useNavigate();
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [filter, setFilter] = useState<StatusFilter>("all");
 
   useEffect(() => {
     const u = getCurrentUser();
@@ -29,14 +32,33 @@ function AgentDashboard() {
 
   const { items, loading } = useRequestsLive({ agentId: user?.agentId });
 
-  const stats = useMemo(
+  const counts = useMemo(
     () => ({
-      total: items.length,
-      newReq: items.filter((r) => r.status === "new").length,
-      sales: items.filter((r) => r.status === "sold").length,
+      all: items.length,
+      new: items.filter((r) => r.status === "new").length,
+      processing: items.filter((r) => r.status === "processing").length,
+      sold: items.filter((r) => r.status === "sold").length,
+      rejected: items.filter((r) => r.status === "rejected").length,
+      reupload: items.filter((r) => r.status === "reupload").length,
     }),
     [items],
   );
+
+  const stats = { total: counts.all, newReq: counts.new, sales: counts.sold };
+
+  const filteredItems = useMemo(
+    () => (filter === "all" ? items : items.filter((r) => r.status === filter)),
+    [items, filter],
+  );
+
+  const tabs: { key: StatusFilter; label: string; tone: string }[] = [
+    { key: "all", label: lang === "ar" ? "الكل" : "All", tone: "bg-foreground text-background" },
+    { key: "new", label: t.status.new, tone: "bg-info text-info-foreground" },
+    { key: "processing", label: t.status.processing, tone: "bg-warning text-warning-foreground" },
+    { key: "sold", label: t.status.sold, tone: "bg-success text-success-foreground" },
+    { key: "reupload", label: t.status.reupload, tone: "bg-purple text-purple-foreground" },
+    { key: "rejected", label: t.status.rejected, tone: "bg-destructive text-destructive-foreground" },
+  ];
 
   const Chevron = dir === "rtl" ? ChevronLeft : ChevronRight;
 
@@ -64,6 +86,36 @@ function AgentDashboard() {
       {/* Personal client link */}
       <ShareLinkCard agentId={user.agentId ?? ""} agentName={user.name} />
 
+      {/* Status filter tabs */}
+      <div className="mb-4 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <div className="flex w-max gap-2 sm:w-auto sm:flex-wrap">
+          {tabs.map((tab) => {
+            const active = filter === tab.key;
+            const count = counts[tab.key];
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-semibold transition active:scale-95 ${
+                  active
+                    ? "border-transparent bg-primary text-primary-foreground shadow-soft"
+                    : "border-border bg-card text-foreground hover:bg-muted"
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-bold ${
+                    active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Desktop table */}
       <div className="hidden overflow-hidden rounded-2xl border border-border bg-card shadow-card md:block">
         <table className="w-full text-sm">
@@ -78,7 +130,7 @@ function AgentDashboard() {
           <tbody>
             {loading ? (
               <tr><td colSpan={4} className="px-5 py-12 text-center text-muted-foreground">…</td></tr>
-            ) : items.length === 0 ? (
+            ) : filteredItems.length === 0 ? (
               <tr><td colSpan={4} className="px-5 py-8">
                 <EmptyState
                   icon={<Inbox className="h-7 w-7" />}
@@ -87,7 +139,7 @@ function AgentDashboard() {
                 />
               </td></tr>
             ) : (
-              items.map((r) => (
+              filteredItems.map((r) => (
                 <tr key={r.id} className="border-t border-border transition hover:bg-muted/30">
                   <td className="px-5 py-4 font-semibold text-foreground">{r.id}</td>
                   <td className="px-5 py-4 text-muted-foreground">
@@ -116,14 +168,14 @@ function AgentDashboard() {
       <div className="space-y-3 md:hidden">
         {loading ? (
           <p className="py-8 text-center text-muted-foreground">…</p>
-        ) : items.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <EmptyState
             icon={<Inbox className="h-7 w-7" />}
             title={t.agent.emptyTitle}
             subtitle={t.agent.emptySubtitle}
           />
         ) : (
-          items.map((r) => (
+          filteredItems.map((r) => (
             <Link
               key={r.id}
               to="/requests/$id"

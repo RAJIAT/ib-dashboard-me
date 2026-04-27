@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, FileText, Inbox } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, Inbox, Copy, Check, Share2 } from "lucide-react";
+import { toast } from "sonner";
 import { DashboardShell } from "@/components/DashboardShell";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -44,7 +45,7 @@ function AgentDashboard() {
   return (
     <DashboardShell role="agent" title={t.nav.requests}>
       {/* Header strip */}
-      <div className="mb-5 rounded-2xl border border-border bg-card p-4 shadow-card animate-fade-in">
+      <div className="mb-4 rounded-2xl border border-border bg-card p-4 shadow-card animate-fade-in">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-foreground">
@@ -59,6 +60,9 @@ function AgentDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Personal client link */}
+      <ShareLinkCard agentId={user.agentId ?? ""} agentName={user.name} />
 
       {/* Desktop table */}
       <div className="hidden overflow-hidden rounded-2xl border border-border bg-card shadow-card md:block">
@@ -160,5 +164,91 @@ function Chip({ label, value, tone }: { label: string; value: number; tone: "pri
       <span className="opacity-80">{label}</span>
       <span className="font-bold">{value}</span>
     </span>
+  );
+}
+
+function ShareLinkCard({ agentId, agentName }: { agentId: string; agentName: string }) {
+  const { t, lang } = useLang();
+  const [copied, setCopied] = useState(false);
+
+  const link = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return `${window.location.origin}/?agent=${encodeURIComponent(agentId)}`;
+  }, [agentId]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      toast.success(lang === "ar" ? "تم نسخ الرابط" : "Link copied");
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error(lang === "ar" ? "تعذر النسخ" : "Copy failed");
+    }
+  };
+
+  const share = async () => {
+    const shareText =
+      lang === "ar"
+        ? `مرحباً، فضلاً ارفع مستنداتك من خلال الرابط التالي:\n${link}`
+        : `Hello, please upload your documents using this link:\n${link}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: agentName, text: shareText, url: link });
+      } catch {
+        /* user cancelled */
+      }
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank");
+    }
+  };
+
+  if (!agentId) return null;
+
+  return (
+    <div className="mb-5 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary-soft to-card p-4 shadow-card animate-fade-in">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-bold text-foreground">
+            {lang === "ar" ? "رابطك الخاص للعملاء" : "Your client upload link"}
+          </div>
+          <div className="mt-0.5 text-xs text-muted-foreground">
+            {lang === "ar"
+              ? "ابعث هذا الرابط لعميلك ليرفع مستنداته مباشرة لحسابك"
+              : "Send this link to your client to upload documents directly to your account"}
+          </div>
+        </div>
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+          {agentId}
+        </span>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div
+          dir="ltr"
+          className="flex-1 truncate rounded-xl border border-border bg-surface px-3 py-2.5 text-xs font-mono text-foreground"
+        >
+          {link}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={copy}
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95"
+          >
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied
+              ? lang === "ar" ? "تم النسخ" : "Copied"
+              : lang === "ar" ? "نسخ" : "Copy"}
+          </button>
+          <button
+            onClick={share}
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground transition hover:bg-muted active:scale-95"
+          >
+            <Share2 className="h-4 w-4" />
+            {lang === "ar" ? "مشاركة" : "Share"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

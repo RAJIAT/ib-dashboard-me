@@ -199,6 +199,7 @@ function assertNotProductionDemo() {
   const isSafeDemoHost =
     hostname === "localhost" ||
     hostname === "127.0.0.1" ||
+    hostname.endsWith(".lovable.app") ||
     hostname.endsWith(".lovableproject.com") ||
     hostname.includes("-preview--");
   if (isSafeDemoHost) return;

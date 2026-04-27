@@ -8,7 +8,7 @@ import { useLang } from "@/i18n/LanguageProvider";
 import { isPdfDataUrl } from "@/lib/imageUtils";
 import { dxFetchAsset, isDirectusAssetUrl } from "@/services/directus";
 import {
-  getCurrentUser, getRequest, updateRequestStatus,
+  getCurrentUser, refreshCurrentUser, getRequest, updateRequestStatus,
   type InsuranceRequest, type RequestStatus,
 } from "@/services/api";
 

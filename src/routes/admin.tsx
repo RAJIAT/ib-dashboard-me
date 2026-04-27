@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useLang } from "@/i18n/LanguageProvider";
 import { useRequestsLive } from "@/hooks/useRequestsLive";
 import {
-  getCurrentUser, listAgents, listBranches,
+  getCurrentUser, refreshCurrentUser, listAgents, listBranches,
   type RequestStatus,
 } from "@/services/api";
 

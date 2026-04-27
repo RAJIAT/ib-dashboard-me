@@ -139,15 +139,15 @@ function RequestDetails() {
       {zoom && (
         <div
           className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-foreground/85 p-4"
-          onClick={() => setZoom(null)}
+          onClick={() => { setZoom(null); setZoomMime(""); }}
         >
           <button
-            onClick={() => setZoom(null)}
+            onClick={() => { setZoom(null); setZoomMime(""); }}
             className="absolute top-4 right-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface text-foreground shadow-soft transition hover:bg-muted"
           >
             <X className="h-5 w-5" />
           </button>
-          {isPdfDataUrl(zoom) ? (
+          {isPdfDataUrl(zoom) || zoomMime === "application/pdf" ? (
             <iframe
               src={zoom}
               title="PDF"
@@ -168,13 +168,49 @@ function RequestDetails() {
   );
 }
 
+/**
+ * Resolves a stored asset reference to a renderable URL. For Directus assets,
+ * fetches the binary with an Authorization header and returns a `blob:` URL
+ * so the bearer token never appears in the URL bar, server logs or Referer.
+ */
+function useAssetUrl(url: string): { src: string; mime: string; loading: boolean } {
+  const [src, setSrc] = useState<string>("");
+  const [mime, setMime] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let revoke = "";
+    if (!url) { setSrc(""); setMime(""); return; }
+    if (!isDirectusAssetUrl(url)) {
+      // data: or http(s) URL we can use directly.
+      setSrc(url);
+      setMime(url.startsWith("data:application/pdf") ? "application/pdf" : "");
+      return;
+    }
+    const fileId = url.split("/assets/")[1]?.split("?")[0] ?? "";
+    setLoading(true);
+    dxFetchAsset(fileId)
+      .then((res) => {
+        if (!res) { setSrc(""); setMime(""); return; }
+        revoke = res.url;
+        setSrc(res.url);
+        setMime(res.mime);
+      })
+      .finally(() => setLoading(false));
+    return () => { if (revoke) URL.revokeObjectURL(revoke); };
+  }, [url]);
+
+  return { src, mime, loading };
+}
+
 function ImgCard({
   label, url, onZoom, pdfLabel,
-}: { label: string; url: string; onZoom: (u: string) => void; pdfLabel: string }) {
-  const pdf = isPdfDataUrl(url);
+}: { label: string; url: string; onZoom: (u: string, mime: string) => void; pdfLabel: string }) {
+  const { src, mime, loading } = useAssetUrl(url);
+  const pdf = isPdfDataUrl(src) || mime === "application/pdf";
   return (
     <button
-      onClick={() => url && onZoom(url)}
+      onClick={() => src && onZoom(src, mime)}
       className="group block overflow-hidden rounded-2xl border border-border bg-card text-start shadow-card transition hover:shadow-elevated active:scale-[0.99]"
     >
       <div className="aspect-[4/3] w-full overflow-hidden bg-muted">
@@ -183,10 +219,12 @@ function ImgCard({
             <FileText className="h-12 w-12" />
             <span className="text-xs font-semibold">{pdfLabel}</span>
           </div>
-        ) : url ? (
-          <img src={url} alt={label} className="h-full w-full object-cover transition group-hover:scale-105" />
+        ) : src ? (
+          <img src={src} alt={label} className="h-full w-full object-cover transition group-hover:scale-105" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground">—</div>
+          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+            {loading ? "…" : "—"}
+          </div>
         )}
       </div>
       <div className="px-4 py-3">

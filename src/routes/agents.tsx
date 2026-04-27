@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { AgentFormDialog, type AgentFormValues } from "@/components/AgentFormDialog";
 import { useLang } from "@/i18n/LanguageProvider";
 import {
-  createAgent, deleteAgent, getAgents, getCurrentUser,
+  createAgent, deleteAgent, getAgents, getCurrentUser, refreshCurrentUser,
   subscribeAgents, updateAgent, type Agent,
 } from "@/services/api";
 

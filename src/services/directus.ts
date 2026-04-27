@@ -74,10 +74,30 @@ export async function dxFetch(path: string, init: RequestInit = {}, opts?: { aut
   const res = await fetch(`${DIRECTUS_URL}${path}`, { ...init, headers });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Directus ${res.status}: ${text || res.statusText}`);
+    // Log the raw backend body to the console for debugging only — never
+    // surface it to end users (it can leak collection names, constraint
+    // names, validation rule paths and other backend internals).
+    if (typeof console !== "undefined") {
+      console.error(`[directus] ${res.status} ${path}`, text);
+    }
+    throw new Error(safeErrorMessage(res.status));
   }
   if (res.status === 204) return null;
   return res.json();
+}
+
+/** Map HTTP status codes to safe, user-friendly messages. */
+function safeErrorMessage(status: number): string {
+  if (status === 400) return "Invalid request. Please check the form and try again.";
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You are not authorized to perform this action.";
+  if (status === 404) return "The requested item could not be found.";
+  if (status === 409) return "This record already exists or conflicts with existing data.";
+  if (status === 413) return "The file is too large.";
+  if (status === 422) return "Some fields are invalid. Please review and try again.";
+  if (status === 429) return "Too many requests. Please slow down and try again.";
+  if (status >= 500) return "The server is temporarily unavailable. Please try again.";
+  return "Request failed. Please try again.";
 }
 
 // ---------- Auth ----------

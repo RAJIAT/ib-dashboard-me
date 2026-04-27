@@ -187,7 +187,7 @@ export const translations = {
       email: "Email",
       password: "Password",
       submit: "Sign in",
-      hint: "Demo: admin@aib.com (to create agents) — any password",
+      hint: "Demo: admin@aib.com (admin) or agent@aib.com (agent) — any password",
       invalid: "Invalid credentials",
     },
     nav: {

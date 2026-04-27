@@ -31,6 +31,10 @@ function RequestDetails() {
 
   useEffect(() => {
     if (!user) { navigate({ to: "/login" }); return; }
+    // Verify session is still valid server-side (Directus mode).
+    refreshCurrentUser().then((fresh) => {
+      if (!fresh) { navigate({ to: "/login" }); return; }
+    });
     getRequest(id).then((r) => { setReq(r); setLoading(false); });
   }, [id, navigate, user]);
 

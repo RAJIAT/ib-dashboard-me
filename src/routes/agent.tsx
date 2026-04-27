@@ -130,7 +130,7 @@ function AgentDashboard() {
           <tbody>
             {loading ? (
               <tr><td colSpan={4} className="px-5 py-12 text-center text-muted-foreground">…</td></tr>
-            ) : items.length === 0 ? (
+            ) : filteredItems.length === 0 ? (
               <tr><td colSpan={4} className="px-5 py-8">
                 <EmptyState
                   icon={<Inbox className="h-7 w-7" />}
@@ -139,7 +139,7 @@ function AgentDashboard() {
                 />
               </td></tr>
             ) : (
-              items.map((r) => (
+              filteredItems.map((r) => (
                 <tr key={r.id} className="border-t border-border transition hover:bg-muted/30">
                   <td className="px-5 py-4 font-semibold text-foreground">{r.id}</td>
                   <td className="px-5 py-4 text-muted-foreground">
@@ -168,14 +168,14 @@ function AgentDashboard() {
       <div className="space-y-3 md:hidden">
         {loading ? (
           <p className="py-8 text-center text-muted-foreground">…</p>
-        ) : items.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <EmptyState
             icon={<Inbox className="h-7 w-7" />}
             title={t.agent.emptyTitle}
             subtitle={t.agent.emptySubtitle}
           />
         ) : (
-          items.map((r) => (
+          filteredItems.map((r) => (
             <Link
               key={r.id}
               to="/requests/$id"

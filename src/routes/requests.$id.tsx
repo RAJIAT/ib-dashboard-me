@@ -24,6 +24,7 @@ function RequestDetails() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [zoom, setZoom] = useState<string | null>(null);
+  const [zoomMime, setZoomMime] = useState<string>("");
 
   const user = getCurrentUser();
   const role = user?.role ?? "agent";

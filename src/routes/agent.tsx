@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useLang } from "@/i18n/LanguageProvider";
 import { useRequestsLive } from "@/hooks/useRequestsLive";
-import { getCurrentUser, type AuthUser } from "@/services/api";
+import { getCurrentUser, refreshCurrentUser, type AuthUser } from "@/services/api";
 
 export const Route = createFileRoute("/agent")({
   component: AgentDashboard,
@@ -28,6 +28,11 @@ function AgentDashboard() {
       return;
     }
     setUser(u);
+    // Re-verify role server-side; if tampered, send to login.
+    refreshCurrentUser().then((fresh) => {
+      if (!fresh || fresh.role !== "agent") { navigate({ to: "/login" }); return; }
+      setUser(fresh);
+    });
   }, [navigate]);
 
   const { items, loading } = useRequestsLive({ agentId: user?.agentId });

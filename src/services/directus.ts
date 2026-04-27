@@ -74,10 +74,30 @@ export async function dxFetch(path: string, init: RequestInit = {}, opts?: { aut
   const res = await fetch(`${DIRECTUS_URL}${path}`, { ...init, headers });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Directus ${res.status}: ${text || res.statusText}`);
+    // Log the raw backend body to the console for debugging only — never
+    // surface it to end users (it can leak collection names, constraint
+    // names, validation rule paths and other backend internals).
+    if (typeof console !== "undefined") {
+      console.error(`[directus] ${res.status} ${path}`, text);
+    }
+    throw new Error(safeErrorMessage(res.status));
   }
   if (res.status === 204) return null;
   return res.json();
+}
+
+/** Map HTTP status codes to safe, user-friendly messages. */
+function safeErrorMessage(status: number): string {
+  if (status === 400) return "Invalid request. Please check the form and try again.";
+  if (status === 401) return "Your session has expired. Please sign in again.";
+  if (status === 403) return "You are not authorized to perform this action.";
+  if (status === 404) return "The requested item could not be found.";
+  if (status === 409) return "This record already exists or conflicts with existing data.";
+  if (status === 413) return "The file is too large.";
+  if (status === 422) return "Some fields are invalid. Please review and try again.";
+  if (status === 429) return "Too many requests. Please slow down and try again.";
+  if (status >= 500) return "The server is temporarily unavailable. Please try again.";
+  return "Request failed. Please try again.";
 }
 
 // ---------- Auth ----------
@@ -95,6 +115,17 @@ export async function dxLogin(email: string, password: string) {
     expires: Date.now() + (data.expires ?? 900_000),
   };
   writeToken(t);
+  const me = await dxFetchMe();
+  return me;
+}
+
+/** Fetch the currently authenticated Directus user. */
+export async function dxFetchMe(): Promise<{
+  id: string; email: string;
+  first_name?: string; last_name?: string;
+  role?: { name?: string };
+  agent_id?: string; branch?: string; status?: string;
+}> {
   const me = await dxFetch("/users/me?fields=id,email,first_name,last_name,role.name,agent_id,branch,status");
   return me.data as {
     id: string; email: string;
@@ -116,11 +147,38 @@ export async function dxUploadFile(file: File): Promise<string> {
   return json.data.id as string;
 }
 
+/**
+ * Returns the canonical asset URL for a Directus file. The URL deliberately
+ * does NOT include the bearer token — never embed tokens in URLs (they leak
+ * via browser history, server access logs and HTTP Referer headers).
+ *
+ * To actually load the binary, use `dxFetchAsset(fileId)` which sends the
+ * token in an `Authorization` header and returns an object URL.
+ */
 export function dxAssetUrl(fileId: string) {
   if (!fileId) return "";
-  const t = readToken();
-  const qs = t?.access_token ? `?access_token=${encodeURIComponent(t.access_token)}` : "";
-  return `${DIRECTUS_URL}/assets/${fileId}${qs}`;
+  return `${DIRECTUS_URL}/assets/${fileId}`;
+}
+
+/**
+ * Fetch a Directus asset using a Bearer token in the Authorization header,
+ * then expose it to the browser as an `blob:` object URL. The caller is
+ * responsible for revoking the URL with `URL.revokeObjectURL` when done.
+ */
+export async function dxFetchAsset(fileId: string): Promise<{ url: string; mime: string } | null> {
+  if (!fileId || !DIRECTUS_URL) return null;
+  const token = await refreshIfNeeded();
+  const res = await fetch(`${DIRECTUS_URL}/assets/${fileId}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  return { url: URL.createObjectURL(blob), mime: blob.type };
+}
+
+/** True if the URL points at the Directus assets endpoint (needs auth fetch). */
+export function isDirectusAssetUrl(url: string) {
+  return !!DIRECTUS_URL && typeof url === "string" && url.startsWith(`${DIRECTUS_URL}/assets/`);
 }
 
 // ---------- Requests ----------

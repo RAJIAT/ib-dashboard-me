@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useLang } from "@/i18n/LanguageProvider";
 import { useRequestsLive } from "@/hooks/useRequestsLive";
 import {
-  getCurrentUser, listAgents, listBranches,
+  getCurrentUser, refreshCurrentUser, listAgents, listBranches,
   type RequestStatus,
 } from "@/services/api";
 
@@ -28,7 +28,12 @@ function AdminDashboard() {
 
   useEffect(() => {
     const u = getCurrentUser();
-    if (!u || u.role !== "admin") navigate({ to: "/login" });
+    if (!u || u.role !== "admin") { navigate({ to: "/login" }); return; }
+    // Re-verify role against the backend so a tampered localStorage role
+    // (e.g. agent edited to "admin" via DevTools) cannot grant access.
+    refreshCurrentUser().then((fresh) => {
+      if (!fresh || fresh.role !== "admin") navigate({ to: "/login" });
+    });
   }, [navigate]);
 
   const filtered = useMemo(

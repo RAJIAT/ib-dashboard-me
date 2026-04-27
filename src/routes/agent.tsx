@@ -86,6 +86,36 @@ function AgentDashboard() {
       {/* Personal client link */}
       <ShareLinkCard agentId={user.agentId ?? ""} agentName={user.name} />
 
+      {/* Status filter tabs */}
+      <div className="mb-4 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <div className="flex w-max gap-2 sm:w-auto sm:flex-wrap">
+          {tabs.map((tab) => {
+            const active = filter === tab.key;
+            const count = counts[tab.key];
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-semibold transition active:scale-95 ${
+                  active
+                    ? "border-transparent bg-primary text-primary-foreground shadow-soft"
+                    : "border-border bg-card text-foreground hover:bg-muted"
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-bold ${
+                    active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Desktop table */}
       <div className="hidden overflow-hidden rounded-2xl border border-border bg-card shadow-card md:block">
         <table className="w-full text-sm">

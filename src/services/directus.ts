@@ -116,11 +116,38 @@ export async function dxUploadFile(file: File): Promise<string> {
   return json.data.id as string;
 }
 
+/**
+ * Returns the canonical asset URL for a Directus file. The URL deliberately
+ * does NOT include the bearer token — never embed tokens in URLs (they leak
+ * via browser history, server access logs and HTTP Referer headers).
+ *
+ * To actually load the binary, use `dxFetchAsset(fileId)` which sends the
+ * token in an `Authorization` header and returns an object URL.
+ */
 export function dxAssetUrl(fileId: string) {
   if (!fileId) return "";
-  const t = readToken();
-  const qs = t?.access_token ? `?access_token=${encodeURIComponent(t.access_token)}` : "";
-  return `${DIRECTUS_URL}/assets/${fileId}${qs}`;
+  return `${DIRECTUS_URL}/assets/${fileId}`;
+}
+
+/**
+ * Fetch a Directus asset using a Bearer token in the Authorization header,
+ * then expose it to the browser as an `blob:` object URL. The caller is
+ * responsible for revoking the URL with `URL.revokeObjectURL` when done.
+ */
+export async function dxFetchAsset(fileId: string): Promise<{ url: string; mime: string } | null> {
+  if (!fileId || !DIRECTUS_URL) return null;
+  const token = await refreshIfNeeded();
+  const res = await fetch(`${DIRECTUS_URL}/assets/${fileId}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) return null;
+  const blob = await res.blob();
+  return { url: URL.createObjectURL(blob), mime: blob.type };
+}
+
+/** True if the URL points at the Directus assets endpoint (needs auth fetch). */
+export function isDirectusAssetUrl(url: string) {
+  return !!DIRECTUS_URL && typeof url === "string" && url.startsWith(`${DIRECTUS_URL}/assets/`);
 }
 
 // ---------- Requests ----------

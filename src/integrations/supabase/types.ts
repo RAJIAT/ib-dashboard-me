@@ -14,16 +14,138 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      agents: {
+        Row: {
+          active: boolean
+          branch: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          active?: boolean
+          branch?: string | null
+          created_at?: string
+          email?: string | null
+          id: string
+          name: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          active?: boolean
+          branch?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      requests: {
+        Row: {
+          agent_id: string | null
+          agent_name: string | null
+          branch: string | null
+          created_at: string
+          customer_email: string | null
+          customer_name: string | null
+          display_id: string | null
+          emirates: string | null
+          id: string
+          license: string | null
+          passport: string | null
+          registration: string | null
+          status: Database["public"]["Enums"]["request_status"]
+          updated_at: string
+          vehicle_photos: string[] | null
+        }
+        Insert: {
+          agent_id?: string | null
+          agent_name?: string | null
+          branch?: string | null
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          display_id?: string | null
+          emirates?: string | null
+          id?: string
+          license?: string | null
+          passport?: string | null
+          registration?: string | null
+          status?: Database["public"]["Enums"]["request_status"]
+          updated_at?: string
+          vehicle_photos?: string[] | null
+        }
+        Update: {
+          agent_id?: string | null
+          agent_name?: string | null
+          branch?: string | null
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          display_id?: string | null
+          emirates?: string | null
+          id?: string
+          license?: string | null
+          passport?: string | null
+          registration?: string | null
+          status?: Database["public"]["Enums"]["request_status"]
+          updated_at?: string
+          vehicle_photos?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "requests_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "agent"
+      request_status: "new" | "processing" | "sold" | "rejected" | "reupload"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +272,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "agent"],
+      request_status: ["new", "processing", "sold", "rejected", "reupload"],
+    },
   },
 } as const

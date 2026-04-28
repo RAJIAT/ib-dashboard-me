@@ -27,7 +27,7 @@ function UploadPage() {
   const [registration, setRegistration] = useState<File | null>(null);
   const [license, setLicense] = useState<File | null>(null);
   const [emirates, setEmirates] = useState<File | null>(null);
-  const [passport, setPassport] = useState<File | null>(null);
+  const [inspection, setInspection] = useState<File | null>(null);
   const [vehiclePhotos, setVehiclePhotos] = useState<File[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -90,7 +90,7 @@ function UploadPage() {
         customerName: parsed.data.customerName,
         customerEmail: parsed.data.customerEmail,
         images: { registration, license, emirates },
-        optional: { passport, vehiclePhotos },
+        optional: { inspection, vehiclePhotos },
       });
       setDone(true);
       setTimeout(() => navigate({ to: "/success", search: { id } }), 600);
@@ -196,9 +196,9 @@ function UploadPage() {
         {/* Optional uploads */}
         <section className="mt-6 grid gap-4 sm:grid-cols-2" dir={dir}>
           <UploadCard
-            label={t.upload.cards.passport}
-            file={passport}
-            onChange={setPassport}
+            label={t.upload.cards.inspection}
+            file={inspection}
+            onChange={setInspection}
             optional
           />
           <MultiUploadCard

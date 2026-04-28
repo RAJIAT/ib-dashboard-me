@@ -370,7 +370,7 @@ export async function getAgents(): Promise<Agent[]> {
     console.error("[getAgents]", error);
     return [];
   }
-  return (data ?? []).map((a) => ({
+  const list = (data ?? []).map((a) => ({
     userId: a.user_id ?? undefined,
     id: a.id,
     name: a.name,
@@ -378,6 +378,8 @@ export async function getAgents(): Promise<Agent[]> {
     branch: a.branch ?? undefined,
     active: a.active,
   }));
+  cachedAgents = list;
+  return list;
 }
 
 export async function createAgent(input: {

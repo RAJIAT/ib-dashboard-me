@@ -1,41 +1,24 @@
 /**
- * API service layer.
+ * API service layer — backed by Lovable Cloud (Supabase).
  *
- * Two backends are supported via the same interface:
- *   1. Directus REST (when VITE_DIRECTUS_URL is set)  — production
- *   2. localStorage mock (when not set)               — demo / dev
+ * Customer flow (anon): submitUpload — uploads files to `request-docs` bucket,
+ * inserts a row in `requests` with KYC + paths.
  *
- * UI never imports the Directus client directly. To switch deployments,
- * just set VITE_DIRECTUS_URL in the build environment — no UI changes needed.
- *
- * REST mapping (Directus):
- *   POST   /auth/login                 -> login
- *   GET    /users/me                   -> getCurrentUser refresh
- *   GET    /items/requests             -> listRequests (filtered by agent for agents)
- *   GET    /items/requests/:id         -> getRequest
- *   PATCH  /items/requests/:id         -> updateRequestStatus
- *   POST   /files                      -> file upload (returns file id)
- *   POST   /items/requests             -> submitUpload (Public role)
+ * Authenticated flow: agents/admins read their requests via RLS.
  */
 
-import { fileToStoredDataUrl } from "@/lib/imageUtils";
-import {
-  isDirectusEnabled,
-  dxLogin, dxLogout, dxHasSession, dxAssetUrl, dxFetchMe,
-  dxListRequests, dxGetRequest, dxCreateRequest, dxUpdateRequestStatus, dxUploadFile,
-  dxListAgents, dxCreateAgent, dxUpdateAgent, dxDeleteAgent,
-  type DxRequest, type DxUser,
-} from "@/services/directus";
+import { supabase } from "@/integrations/supabase/client";
 
 export type RequestStatus = "new" | "processing" | "sold" | "rejected" | "reupload";
 
 export type InsuranceRequest = {
-  id: string;
+  id: string;            // display_id (REQ-1001) or uuid fallback
+  uuid: string;          // real DB uuid
   agentId: string;
   agentName: string;
   branch: string;
   status: RequestStatus;
-  createdAt: string; // ISO
+  createdAt: string;
   customerName?: string;
   customerEmail?: string;
   images: {
@@ -58,111 +41,12 @@ export type AuthUser = {
   branch?: string;
 };
 
-const STORAGE = {
-  user: "aib_auth_user",
-  requests: "aib_requests",
-  seq: "aib_seq",
-};
-
+const BUCKET = "request-docs";
 const CHANGE_EVENT = "aib:requests-changed";
-
-const SAMPLE_IMG =
-  "https://images.unsplash.com/photo-1486006920555-c77dcf18193c?w=800&q=70";
-
-const BRANCHES = ["Abu Dhabi", "Dubai", "Sharjah"];
-const AGENTS = [
-  { id: "A123", name: "Ahmed Al Mansouri" },
-  { id: "A124", name: "Fatima Al Zaabi" },
-  { id: "A125", name: "Yousef Al Shamsi" },
-];
-
-// =====================================================================
-// Mock helpers (used only when Directus is not configured)
-// =====================================================================
-
-function seed(): InsuranceRequest[] {
-  const statuses: RequestStatus[] = ["new", "new", "processing", "sold", "rejected", "reupload", "new", "processing"];
-  const now = Date.now();
-  return statuses.map((status, i) => {
-    const agent = AGENTS[i % AGENTS.length];
-    return {
-      id: `REQ-${1000 + i}`,
-      agentId: agent.id,
-      agentName: agent.name,
-      branch: BRANCHES[i % BRANCHES.length],
-      status,
-      createdAt: new Date(now - i * 86400000 * 0.7).toISOString(),
-      images: { registration: SAMPLE_IMG, license: SAMPLE_IMG, emirates: SAMPLE_IMG },
-    };
-  });
-}
-
-function load(): InsuranceRequest[] {
-  if (typeof window === "undefined") return [];
-  const raw = localStorage.getItem(STORAGE.requests);
-  if (!raw) {
-    const s = seed();
-    localStorage.setItem(STORAGE.requests, JSON.stringify(s));
-    localStorage.setItem(STORAGE.seq, String(1000 + s.length));
-    return s;
-  }
-  try { return JSON.parse(raw); } catch { return []; }
-}
-
-function save(list: InsuranceRequest[]) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE.requests, JSON.stringify(list));
-  } catch {
-    const trimmed = list.map((r, idx) =>
-      idx < 5 ? r : { ...r, images: { registration: "", license: "", emirates: "" } },
-    );
-    try { localStorage.setItem(STORAGE.requests, JSON.stringify(trimmed)); } catch { /* ignore */ }
-  }
-  notifyChange();
-}
-
-function nextId(): string {
-  if (typeof window === "undefined") return `REQ-${Date.now()}`;
-  const cur = Number(localStorage.getItem(STORAGE.seq) ?? "1000");
-  const next = cur + 1;
-  localStorage.setItem(STORAGE.seq, String(next));
-  return `REQ-${next}`;
-}
-
-const delay = (ms = 400) => new Promise((r) => setTimeout(r, ms));
 
 function notifyChange() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(CHANGE_EVENT));
-}
-
-// =====================================================================
-// Directus → InsuranceRequest mapping
-// =====================================================================
-
-function mapDx(r: DxRequest): InsuranceRequest {
-  const cached = cachedAgents?.find((a) => a.id === r.agent_id);
-  const agentMatch = cached ?? AGENTS.find((a) => a.id === r.agent_id);
-  return {
-    id: r.id,
-    agentId: r.agent_id,
-    agentName: r.agent_name || agentMatch?.name || r.agent_id,
-    branch: r.branch || cached?.branch || "—",
-    status: (r.status as RequestStatus) ?? "new",
-    createdAt: r.date_created,
-    customerName: r.customer_name ?? undefined,
-    customerEmail: r.customer_email ?? undefined,
-    images: {
-      registration: dxAssetUrl(r.registration),
-      license: dxAssetUrl(r.license),
-      emirates: dxAssetUrl(r.emirates),
-      passport: r.passport ? dxAssetUrl(r.passport) : undefined,
-      vehiclePhotos: Array.isArray(r.vehicle_photos) && r.vehicle_photos.length
-        ? r.vehicle_photos.map((id) => dxAssetUrl(id))
-        : undefined,
-    },
-  };
 }
 
 // =====================================================================
@@ -172,21 +56,16 @@ function mapDx(r: DxRequest): InsuranceRequest {
 export function subscribeRequests(cb: () => void): () => void {
   if (typeof window === "undefined") return () => {};
   const onChange = () => cb();
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE.requests) cb();
-  };
   window.addEventListener(CHANGE_EVENT, onChange);
-  window.addEventListener("storage", onStorage);
-  // When Directus is enabled, lightly poll so admins see new uploads from
-  // anonymous customers (they can't dispatch our local CustomEvent).
-  let interval: ReturnType<typeof setInterval> | null = null;
-  if (isDirectusEnabled()) {
-    interval = setInterval(cb, 15000);
-  }
+
+  const channel = supabase
+    .channel("requests-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "requests" }, () => cb())
+    .subscribe();
+
   return () => {
     window.removeEventListener(CHANGE_EVENT, onChange);
-    window.removeEventListener("storage", onStorage);
-    if (interval) clearInterval(interval);
+    supabase.removeChannel(channel);
   };
 }
 
@@ -194,179 +73,193 @@ export function subscribeRequests(cb: () => void): () => void {
 // Auth
 // =====================================================================
 
-/**
- * Build-time guard: demo mode (no Directus URL configured) MUST NOT run in
- * production builds. In demo mode the login function ignores passwords by
- * design, so silently shipping it to production would mean any visitor can
- * sign in as admin. We hard-fail instead.
- */
-function assertNotProductionDemo() {
-  if (isDirectusEnabled()) return;
-  // Lovable preview builds are technically production builds too, but they are
-  // used for client demos. Keep demo-login disabled on published/custom domains
-  // while allowing it on localhost and preview URLs.
-  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
-  const allowedDemoHosts = [
-    "rahaib.rajiatiyah.com",
-  ];
-  const isSafeDemoHost =
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname.endsWith(".lovable.app") ||
-    hostname.endsWith(".lovableproject.com") ||
-    hostname.includes("-preview--") ||
-    allowedDemoHosts.includes(hostname);
-  if (isSafeDemoHost) return;
-
-  const isProd = typeof import.meta !== "undefined" && (import.meta as any).env?.PROD;
-  if (isProd) {
-    throw new Error(
-      "Demo mode is not available in production. Set VITE_DIRECTUS_URL at build time to enable a real backend.",
-    );
-  }
-}
-
 export async function login(email: string, password: string): Promise<AuthUser> {
-  if (isDirectusEnabled()) {
-    const me = await dxLogin(email, password);
-    const roleName = (me.role?.name || "").toLowerCase();
-    const role: Role = roleName.includes("admin") ? "admin" : "agent";
-    const user: AuthUser = {
-      id: me.id,
-      email: me.email,
-      name: [me.first_name, me.last_name].filter(Boolean).join(" ") || me.email,
-      role,
-      agentId: me.agent_id,
-      branch: me.branch,
-    };
-    localStorage.setItem(STORAGE.user, JSON.stringify(user));
-    return user;
-  }
-
-  assertNotProductionDemo();
-  await delay(500);
-  const e = email.trim().toLowerCase();
-  if (e === "admin@aib.com" || e === "admin@aib.local") {
-    const u: AuthUser = { id: "U1", email: e, name: "Admin User", role: "admin" };
-    localStorage.setItem(STORAGE.user, JSON.stringify(u));
-    return u;
-  }
-  // Match against mock agents directory (created via /admin/agents)
-  const directory = loadMockAgents();
-  const match = directory.find((a) => a.email?.toLowerCase() === e && a.active);
-  if (match) {
-    const u: AuthUser = {
-      id: match.userId ?? `U-${match.id}`, email: e, name: match.name,
-      role: "agent", agentId: match.id, branch: match.branch,
-    };
-    localStorage.setItem(STORAGE.user, JSON.stringify(u));
-    return u;
-  }
-  // Legacy demo fallback
-  if (e === "agent@aib.com" || e.endsWith("@aib.com")) {
-    const u: AuthUser = {
-      id: "U2", email: e, name: "Ahmed Al Mansouri",
-      role: "agent", agentId: "A123", branch: "Abu Dhabi",
-    };
-    localStorage.setItem(STORAGE.user, JSON.stringify(u));
-    return u;
-  }
-  throw new Error("Invalid credentials");
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.user) throw new Error("Invalid credentials");
+  return await loadAuthUser(data.user.id, data.user.email ?? email);
 }
 
-export function logout() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(STORAGE.user);
-  if (isDirectusEnabled()) dxLogout();
+export async function signUp(email: string, password: string, fullName: string): Promise<AuthUser> {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: `${window.location.origin}/login`,
+      data: { full_name: fullName },
+    },
+  });
+  if (error || !data.user) throw new Error(error?.message ?? "Sign up failed");
+  return await loadAuthUser(data.user.id, data.user.email ?? email, fullName);
+}
+
+export async function logout() {
+  await supabase.auth.signOut();
 }
 
 export function getCurrentUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(STORAGE.user);
+  const raw = localStorage.getItem("aib_auth_user");
   if (!raw) return null;
-  try {
-    const u = JSON.parse(raw) as AuthUser;
-    // If Directus is enabled but the session token vanished, drop the local user too.
-    if (isDirectusEnabled() && !dxHasSession()) {
-      localStorage.removeItem(STORAGE.user);
-      return null;
-    }
-    return u;
-  } catch { return null; }
+  try { return JSON.parse(raw) as AuthUser; } catch { return null; }
 }
 
-/**
- * Re-verify the current user against the backend. In Directus mode this calls
- * `/users/me` and refreshes the cached AuthUser (including role) so a user
- * cannot escalate privileges by editing localStorage. Returns null if the
- * session is no longer valid or if the cached role doesn't match the server.
- */
 export async function refreshCurrentUser(): Promise<AuthUser | null> {
-  if (typeof window === "undefined") return null;
-  if (!isDirectusEnabled()) return getCurrentUser();
-  if (!dxHasSession()) {
-    localStorage.removeItem(STORAGE.user);
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) {
+    localStorage.removeItem("aib_auth_user");
     return null;
   }
-  try {
-    const me = await dxFetchMe();
-    const roleName = (me.role?.name || "").toLowerCase();
-    const role: Role = roleName.includes("admin") ? "admin" : "agent";
-    const user: AuthUser = {
-      id: me.id,
-      email: me.email,
-      name: [me.first_name, me.last_name].filter(Boolean).join(" ") || me.email,
-      role,
-      agentId: me.agent_id,
-      branch: me.branch,
-    };
-    localStorage.setItem(STORAGE.user, JSON.stringify(user));
-    return user;
-  } catch {
-    // Session invalid or network down — clear cached user to avoid a stale
-    // role being trusted by the UI.
-    localStorage.removeItem(STORAGE.user);
-    dxLogout();
-    return null;
+  return await loadAuthUser(data.user.id, data.user.email ?? "");
+}
+
+async function loadAuthUser(userId: string, email: string, fallbackName?: string): Promise<AuthUser> {
+  // Determine role
+  const { data: roles } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+  const isAdmin = roles?.some((r) => r.role === "admin");
+  const role: Role = isAdmin ? "admin" : "agent";
+
+  // Try to find linked agent record
+  let agentRecord: { id: string; name: string; branch: string | null } | null = null;
+  if (!isAdmin) {
+    const { data: ag } = await supabase
+      .from("agents")
+      .select("id,name,branch")
+      .eq("user_id", userId)
+      .maybeSingle();
+    agentRecord = ag ?? null;
   }
+
+  const user: AuthUser = {
+    id: userId,
+    email,
+    name: agentRecord?.name ?? fallbackName ?? email,
+    role,
+    agentId: agentRecord?.id,
+    branch: agentRecord?.branch ?? undefined,
+  };
+  localStorage.setItem("aib_auth_user", JSON.stringify(user));
+  return user;
 }
 
 // =====================================================================
 // Requests
 // =====================================================================
 
+function signedUrl(path: string | null | undefined): string {
+  if (!path) return "";
+  // Use public path placeholder; actual signed URL is fetched on demand below.
+  return `storage:${path}`;
+}
+
+/** Resolve a `storage:path` placeholder into a real signed URL (1 hour). */
+export async function resolveAssetUrl(stored: string): Promise<{ url: string; mime: string }> {
+  if (!stored) return { url: "", mime: "" };
+  if (!stored.startsWith("storage:")) return { url: stored, mime: "" };
+  const path = stored.slice("storage:".length);
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 3600);
+  if (error || !data?.signedUrl) return { url: "", mime: "" };
+  // Best-effort MIME from extension
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  const mime =
+    ext === "pdf" ? "application/pdf" :
+    ext === "png" ? "image/png" :
+    ext === "webp" ? "image/webp" :
+    ext === "heic" || ext === "heif" ? `image/${ext}` :
+    "image/jpeg";
+  return { url: data.signedUrl, mime };
+}
+
+type DbRequestRow = {
+  id: string;
+  display_id: string | null;
+  agent_id: string | null;
+  agent_name: string | null;
+  branch: string | null;
+  status: RequestStatus;
+  created_at: string;
+  customer_name: string | null;
+  customer_email: string | null;
+  registration: string | null;
+  license: string | null;
+  emirates: string | null;
+  passport: string | null;
+  vehicle_photos: string[] | null;
+};
+
+function mapRow(r: DbRequestRow): InsuranceRequest {
+  return {
+    id: r.display_id ?? r.id,
+    uuid: r.id,
+    agentId: r.agent_id ?? "",
+    agentName: r.agent_name ?? r.agent_id ?? "—",
+    branch: r.branch ?? "—",
+    status: r.status,
+    createdAt: r.created_at,
+    customerName: r.customer_name ?? undefined,
+    customerEmail: r.customer_email ?? undefined,
+    images: {
+      registration: signedUrl(r.registration),
+      license: signedUrl(r.license),
+      emirates: signedUrl(r.emirates),
+      passport: r.passport ? signedUrl(r.passport) : undefined,
+      vehiclePhotos: r.vehicle_photos && r.vehicle_photos.length
+        ? r.vehicle_photos.map((p) => signedUrl(p))
+        : undefined,
+    },
+  };
+}
+
 export async function listRequests(opts?: { agentId?: string }): Promise<InsuranceRequest[]> {
-  if (isDirectusEnabled()) {
-    const rows = await dxListRequests(opts);
-    return rows.map(mapDx);
+  let query = supabase.from("requests").select("*").order("created_at", { ascending: false }).limit(500);
+  if (opts?.agentId) query = query.eq("agent_id", opts.agentId);
+  const { data, error } = await query;
+  if (error) {
+    console.error("[listRequests]", error);
+    return [];
   }
-  await delay(250);
-  const all = load().sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
-  return opts?.agentId ? all.filter((r) => r.agentId === opts.agentId) : all;
+  return (data as DbRequestRow[]).map(mapRow);
 }
 
 export async function getRequest(id: string): Promise<InsuranceRequest | null> {
-  if (isDirectusEnabled()) {
-    const r = await dxGetRequest(id);
-    return r ? mapDx(r) : null;
-  }
-  await delay(200);
-  return load().find((r) => r.id === id) ?? null;
+  // id may be display_id (REQ-xxxx) or uuid
+  const isUuid = /^[0-9a-f]{8}-/i.test(id);
+  const col = isUuid ? "id" : "display_id";
+  const { data, error } = await supabase
+    .from("requests")
+    .select("*")
+    .eq(col, id)
+    .maybeSingle();
+  if (error || !data) return null;
+  return mapRow(data as DbRequestRow);
 }
 
 export async function updateRequestStatus(id: string, status: RequestStatus): Promise<InsuranceRequest> {
-  if (isDirectusEnabled()) {
-    const r = await dxUpdateRequestStatus(id, status);
-    notifyChange();
-    return mapDx(r);
-  }
-  await delay(300);
-  const list = load();
-  const idx = list.findIndex((r) => r.id === id);
-  if (idx < 0) throw new Error("Not found");
-  list[idx] = { ...list[idx], status };
-  save(list);
-  return list[idx];
+  const isUuid = /^[0-9a-f]{8}-/i.test(id);
+  const col = isUuid ? "id" : "display_id";
+  const { data, error } = await supabase
+    .from("requests")
+    .update({ status })
+    .eq(col, id)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Update failed");
+  notifyChange();
+  return mapRow(data as DbRequestRow);
+}
+
+async function uploadOne(file: File, folder: string, kind: string): Promise<string> {
+  const ext = (file.name.split(".").pop() ?? "bin").toLowerCase();
+  const path = `${folder}/${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    cacheControl: "3600",
+    upsert: false,
+    contentType: file.type || undefined,
+  });
+  if (error) throw error;
+  return path;
 }
 
 export async function submitUpload(input: {
@@ -376,96 +269,64 @@ export async function submitUpload(input: {
   images: { registration: File; license: File; emirates: File };
   optional?: { passport?: File | null; vehiclePhotos?: File[] };
 }): Promise<{ id: string }> {
-  const passportFile = input.optional?.passport ?? null;
-  const vehicleFiles = input.optional?.vehiclePhotos ?? [];
+  const folder = `${input.agentId || "anon"}/${Date.now()}`;
 
-  if (isDirectusEnabled()) {
-    const [registration, license, emirates] = await Promise.all([
-      dxUploadFile(input.images.registration),
-      dxUploadFile(input.images.license),
-      dxUploadFile(input.images.emirates),
-    ]);
-    const passport = passportFile ? await dxUploadFile(passportFile) : null;
-    const vehicle_photos = vehicleFiles.length
-      ? await Promise.all(vehicleFiles.map((f) => dxUploadFile(f)))
-      : null;
-    const agent = (cachedAgents ?? []).find((a) => a.id === input.agentId);
-    const r = await dxCreateRequest({
-      agent_id: input.agentId,
-      agent_name: agent?.name,
-      branch: agent?.branch,
+  const [registration, license, emirates] = await Promise.all([
+    uploadOne(input.images.registration, folder, "registration"),
+    uploadOne(input.images.license, folder, "license"),
+    uploadOne(input.images.emirates, folder, "emirates"),
+  ]);
+
+  const passport = input.optional?.passport
+    ? await uploadOne(input.optional.passport, folder, "passport")
+    : null;
+
+  const vehicleFiles = input.optional?.vehiclePhotos ?? [];
+  const vehicle_photos = vehicleFiles.length
+    ? await Promise.all(vehicleFiles.map((f, i) => uploadOne(f, folder, `vehicle-${i}`)))
+    : [];
+
+  // Look up agent for snapshot data
+  const { data: agentRow } = await supabase
+    .from("agents").select("id,name,branch").eq("id", input.agentId).maybeSingle();
+
+  const { data, error } = await supabase
+    .from("requests")
+    .insert({
+      agent_id: agentRow?.id ?? input.agentId,
+      agent_name: agentRow?.name ?? null,
+      branch: agentRow?.branch ?? null,
+      customer_name: input.customerName ?? null,
+      customer_email: input.customerEmail ?? null,
       registration, license, emirates,
       passport,
       vehicle_photos,
-      customer_name: input.customerName ?? null,
-      customer_email: input.customerEmail ?? null,
-    });
-    notifyChange();
-    return { id: r.id };
-  }
+      status: "new",
+    })
+    .select("display_id,id")
+    .single();
 
-  // Mock path
-  await delay(700 + Math.floor(Math.random() * 500));
-  const [registration, license, emirates] = await Promise.all([
-    fileToStoredDataUrl(input.images.registration),
-    fileToStoredDataUrl(input.images.license),
-    fileToStoredDataUrl(input.images.emirates),
-  ]);
-  const passport = passportFile ? await fileToStoredDataUrl(passportFile) : undefined;
-  const vehiclePhotos = vehicleFiles.length
-    ? await Promise.all(vehicleFiles.map((f) => fileToStoredDataUrl(f)))
-    : undefined;
-  const list = load();
-  const id = nextId();
-  const directory = loadMockAgents();
-  const agent = directory.find((a) => a.id === input.agentId) ?? directory[0];
-  const newReq: InsuranceRequest = {
-    id, agentId: agent.id, agentName: agent.name,
-    branch: agent.branch ?? BRANCHES[list.length % BRANCHES.length],
-    status: "new", createdAt: new Date().toISOString(),
-    customerName: input.customerName,
-    customerEmail: input.customerEmail,
-    images: { registration, license, emirates, passport, vehiclePhotos },
-  };
-  save([newReq, ...list]);
-  return { id };
+  if (error || !data) throw new Error(error?.message ?? "Submit failed");
+  notifyChange();
+  return { id: data.display_id ?? data.id };
 }
 
-function hash(s: string) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return h;
-}
-
-// =====================================================================
-// Demo helpers
-// =====================================================================
+export function isDemoMode() { return false; }
 
 export function resetDemo() {
+  // No-op when running on real backend.
   if (typeof window === "undefined") return;
-  if (isDirectusEnabled()) {
-    // In a real Directus deployment we never wipe data from the client.
-    localStorage.removeItem(STORAGE.user);
-    dxLogout();
-    notifyChange();
-    return;
-  }
-  localStorage.removeItem(STORAGE.requests);
-  localStorage.removeItem(STORAGE.user);
-  localStorage.removeItem(STORAGE.seq);
-  load();
+  localStorage.removeItem("aib_auth_user");
   notifyChange();
 }
 
-export function isDemoMode() { return !isDirectusEnabled(); }
-
 // =====================================================================
-// Agents directory (Admin manages, others read)
+// Agents directory
 // =====================================================================
 
 export type Agent = {
-  userId?: string;        // Directus user UUID (undefined in demo mode)
-  id: string;             // agent_id (business identifier used in URLs and requests)
+  userId?: string;
+  id: string;
   name: string;
   email?: string;
   branch?: string;
@@ -473,7 +334,6 @@ export type Agent = {
 };
 
 const AGENTS_CHANGE_EVENT = "aib:agents-changed";
-const MOCK_AGENTS_KEY = "aib_agents";
 
 function notifyAgentsChange() {
   if (typeof window === "undefined") return;
@@ -484,134 +344,74 @@ export function subscribeAgents(cb: () => void): () => void {
   if (typeof window === "undefined") return () => {};
   const onChange = () => cb();
   window.addEventListener(AGENTS_CHANGE_EVENT, onChange);
-  return () => window.removeEventListener(AGENTS_CHANGE_EVENT, onChange);
-}
-
-function mapDxUser(u: DxUser): Agent {
-  return {
-    userId: u.id,
-    id: u.agent_id || u.id,
-    name: [u.first_name, u.last_name].filter(Boolean).join(" ") || u.email,
-    email: u.email,
-    branch: u.branch,
-    active: u.status === "active",
+  const channel = supabase
+    .channel("agents-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "agents" }, () => cb())
+    .subscribe();
+  return () => {
+    window.removeEventListener(AGENTS_CHANGE_EVENT, onChange);
+    supabase.removeChannel(channel);
   };
 }
 
-function loadMockAgents(): Agent[] {
-  if (typeof window === "undefined") return AGENTS.map((a) => ({ ...a, active: true }));
-  const raw = localStorage.getItem(MOCK_AGENTS_KEY);
-  if (raw) {
-    try { return JSON.parse(raw); } catch { /* ignore */ }
-  }
-  const seeded: Agent[] = AGENTS.map((a, i) => ({
-    id: a.id, name: a.name,
-    email: `${a.id.toLowerCase()}@aib.local`,
-    branch: BRANCHES[i % BRANCHES.length],
-    active: true,
-  }));
-  localStorage.setItem(MOCK_AGENTS_KEY, JSON.stringify(seeded));
-  return seeded;
-}
-
-function saveMockAgents(list: Agent[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(MOCK_AGENTS_KEY, JSON.stringify(list));
-  notifyAgentsChange();
-}
-
-// Async source-of-truth (used by admin agents page)
 export async function getAgents(): Promise<Agent[]> {
-  if (isDirectusEnabled()) {
-    const users = await dxListAgents();
-    const list = users.map(mapDxUser);
-    cachedAgents = list;
-    return list;
+  const { data, error } = await supabase
+    .from("agents")
+    .select("id,user_id,name,email,branch,active")
+    .order("name");
+  if (error) {
+    console.error("[getAgents]", error);
+    return [];
   }
-  await delay(150);
-  const list = loadMockAgents();
-  cachedAgents = list;
-  return list;
+  return (data ?? []).map((a) => ({
+    userId: a.user_id ?? undefined,
+    id: a.id,
+    name: a.name,
+    email: a.email ?? undefined,
+    branch: a.branch ?? undefined,
+    active: a.active,
+  }));
 }
-
-// Synchronous snapshot (used by filters and labels — refreshed by getAgents)
-let cachedAgents: Agent[] | null = null;
-export function listAgents(): Agent[] {
-  if (cachedAgents) return cachedAgents;
-  // Fall back to mock seed in demo, or static names so UI still labels rows
-  // before the async fetch completes in production.
-  if (typeof window !== "undefined" && !isDirectusEnabled()) {
-    cachedAgents = loadMockAgents();
-    return cachedAgents;
-  }
-  return AGENTS.map((a) => ({ id: a.id, name: a.name, active: true }));
-}
-
-export function listBranches() { return BRANCHES; }
 
 export async function createAgent(input: {
-  email: string; password: string; name: string;
-  agentId: string; branch?: string;
+  id: string; name: string; email?: string; branch?: string;
 }): Promise<Agent> {
-  const [first_name, ...rest] = input.name.trim().split(/\s+/);
-  const last_name = rest.join(" ");
-  if (isDirectusEnabled()) {
-    const u = await dxCreateAgent({
-      email: input.email, password: input.password,
-      first_name, last_name, agent_id: input.agentId, branch: input.branch,
-    });
-    notifyAgentsChange();
-    return mapDxUser(u);
-  }
-  await delay(300);
-  const list = loadMockAgents();
-  if (list.some((a) => a.id === input.agentId)) throw new Error("Agent ID already exists");
-  if (list.some((a) => a.email === input.email)) throw new Error("Email already exists");
-  const next: Agent = {
-    id: input.agentId, name: input.name, email: input.email,
-    branch: input.branch, active: true,
+  const { data, error } = await supabase
+    .from("agents")
+    .insert({
+      id: input.id, name: input.name,
+      email: input.email ?? null, branch: input.branch ?? null,
+      active: true,
+    })
+    .select()
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Create failed");
+  notifyAgentsChange();
+  return {
+    id: data.id, name: data.name, email: data.email ?? undefined,
+    branch: data.branch ?? undefined, active: data.active,
   };
-  saveMockAgents([...list, next]);
-  return next;
 }
 
-export async function updateAgent(agent: Agent, patch: {
-  name?: string; branch?: string; active?: boolean; password?: string;
-}): Promise<Agent> {
-  if (isDirectusEnabled() && agent.userId) {
-    const [first_name, ...rest] = (patch.name ?? agent.name).trim().split(/\s+/);
-    const last_name = rest.join(" ");
-    const dxPatch: Parameters<typeof dxUpdateAgent>[1] = {};
-    if (patch.name !== undefined) { dxPatch.first_name = first_name; dxPatch.last_name = last_name; }
-    if (patch.branch !== undefined) dxPatch.branch = patch.branch || null;
-    if (patch.active !== undefined) dxPatch.status = patch.active ? "active" : "suspended";
-    if (patch.password) dxPatch.password = patch.password;
-    const u = await dxUpdateAgent(agent.userId, dxPatch);
-    notifyAgentsChange();
-    return mapDxUser(u);
-  }
-  await delay(250);
-  const list = loadMockAgents();
-  const idx = list.findIndex((a) => a.id === agent.id);
-  if (idx < 0) throw new Error("Agent not found");
-  list[idx] = {
-    ...list[idx],
-    name: patch.name ?? list[idx].name,
-    branch: patch.branch ?? list[idx].branch,
-    active: patch.active ?? list[idx].active,
+export async function updateAgent(id: string, patch: Partial<{
+  name: string; email: string | null; branch: string | null; active: boolean;
+}>): Promise<Agent> {
+  const { data, error } = await supabase
+    .from("agents")
+    .update(patch)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Update failed");
+  notifyAgentsChange();
+  return {
+    id: data.id, name: data.name, email: data.email ?? undefined,
+    branch: data.branch ?? undefined, active: data.active,
   };
-  saveMockAgents(list);
-  return list[idx];
 }
 
-export async function deleteAgent(agent: Agent): Promise<void> {
-  if (isDirectusEnabled() && agent.userId) {
-    await dxDeleteAgent(agent.userId);
-    notifyAgentsChange();
-    return;
-  }
-  await delay(200);
-  const list = loadMockAgents().filter((a) => a.id !== agent.id);
-  saveMockAgents(list);
+export async function deleteAgent(id: string): Promise<void> {
+  const { error } = await supabase.from("agents").delete().eq("id", id);
+  if (error) throw error;
+  notifyAgentsChange();
 }
-

@@ -64,7 +64,10 @@ export const translations = {
       email: "البريد الإلكتروني",
       password: "كلمة المرور",
       submit: "دخول",
-      hint: "تجريبي: admin@aib.com (للإدارة) أو agent@aib.com (للوكيل) — أي كلمة مرور",
+      hint: "تجريبي: أي كلمة مرور تعمل",
+      quickFill: "تعبئة سريعة",
+      asAdmin: "كمسؤول",
+      asAgent: "كوكيل",
       invalid: "بيانات الدخول غير صحيحة",
     },
     nav: {
@@ -237,7 +240,10 @@ export const translations = {
       email: "Email",
       password: "Password",
       submit: "Sign in",
-      hint: "Demo: admin@aib.com (admin) or agent@aib.com (agent) — any password",
+      hint: "Demo: any password works",
+      quickFill: "Quick fill",
+      asAdmin: "as Admin",
+      asAgent: "as Agent",
       invalid: "Invalid credentials",
     },
     nav: {

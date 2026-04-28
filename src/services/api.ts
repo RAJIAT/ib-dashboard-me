@@ -36,10 +36,14 @@ export type InsuranceRequest = {
   branch: string;
   status: RequestStatus;
   createdAt: string; // ISO
+  customerName?: string;
+  customerEmail?: string;
   images: {
     registration: string;
     license: string;
     emirates: string;
+    passport?: string;
+    vehiclePhotos?: string[];
   };
 };
 
@@ -147,10 +151,16 @@ function mapDx(r: DxRequest): InsuranceRequest {
     branch: r.branch || cached?.branch || "—",
     status: (r.status as RequestStatus) ?? "new",
     createdAt: r.date_created,
+    customerName: r.customer_name ?? undefined,
+    customerEmail: r.customer_email ?? undefined,
     images: {
       registration: dxAssetUrl(r.registration),
       license: dxAssetUrl(r.license),
       emirates: dxAssetUrl(r.emirates),
+      passport: r.passport ? dxAssetUrl(r.passport) : undefined,
+      vehiclePhotos: Array.isArray(r.vehicle_photos) && r.vehicle_photos.length
+        ? r.vehicle_photos.map((id) => dxAssetUrl(id))
+        : undefined,
     },
   };
 }
@@ -361,20 +371,34 @@ export async function updateRequestStatus(id: string, status: RequestStatus): Pr
 
 export async function submitUpload(input: {
   agentId: string;
+  customerName?: string;
+  customerEmail?: string;
   images: { registration: File; license: File; emirates: File };
+  optional?: { passport?: File | null; vehiclePhotos?: File[] };
 }): Promise<{ id: string }> {
+  const passportFile = input.optional?.passport ?? null;
+  const vehicleFiles = input.optional?.vehiclePhotos ?? [];
+
   if (isDirectusEnabled()) {
     const [registration, license, emirates] = await Promise.all([
       dxUploadFile(input.images.registration),
       dxUploadFile(input.images.license),
       dxUploadFile(input.images.emirates),
     ]);
+    const passport = passportFile ? await dxUploadFile(passportFile) : null;
+    const vehicle_photos = vehicleFiles.length
+      ? await Promise.all(vehicleFiles.map((f) => dxUploadFile(f)))
+      : null;
     const agent = (cachedAgents ?? []).find((a) => a.id === input.agentId);
     const r = await dxCreateRequest({
       agent_id: input.agentId,
       agent_name: agent?.name,
       branch: agent?.branch,
       registration, license, emirates,
+      passport,
+      vehicle_photos,
+      customer_name: input.customerName ?? null,
+      customer_email: input.customerEmail ?? null,
     });
     notifyChange();
     return { id: r.id };
@@ -387,6 +411,10 @@ export async function submitUpload(input: {
     fileToStoredDataUrl(input.images.license),
     fileToStoredDataUrl(input.images.emirates),
   ]);
+  const passport = passportFile ? await fileToStoredDataUrl(passportFile) : undefined;
+  const vehiclePhotos = vehicleFiles.length
+    ? await Promise.all(vehicleFiles.map((f) => fileToStoredDataUrl(f)))
+    : undefined;
   const list = load();
   const id = nextId();
   const directory = loadMockAgents();
@@ -395,7 +423,9 @@ export async function submitUpload(input: {
     id, agentId: agent.id, agentName: agent.name,
     branch: agent.branch ?? BRANCHES[list.length % BRANCHES.length],
     status: "new", createdAt: new Date().toISOString(),
-    images: { registration, license, emirates },
+    customerName: input.customerName,
+    customerEmail: input.customerEmail,
+    images: { registration, license, emirates, passport, vehiclePhotos },
   };
   save([newReq, ...list]);
   return { id };

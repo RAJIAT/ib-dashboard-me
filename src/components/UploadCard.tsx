@@ -63,8 +63,15 @@ export function UploadCard({ label, file, onChange, optional }: Props) {
         className="hidden"
         onChange={handle}
       />
-      <div className="flex items-center justify-between px-4 pt-4">
-        <h3 className="text-base font-semibold text-foreground">{label}</h3>
+      <div className="flex items-center justify-between gap-2 px-4 pt-4">
+        <h3 className="text-base font-semibold text-foreground">
+          {label}
+          {optional && (
+            <span className="ms-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {t.upload.optional}
+            </span>
+          )}
+        </h3>
         {done && (
           <span className="inline-flex animate-fade-in items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success">
             <Check className="h-3.5 w-3.5" />

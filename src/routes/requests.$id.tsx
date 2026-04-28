@@ -123,10 +123,10 @@ function RequestDetails() {
             <ImgCard label={t.details.emirates} url={req.images.emirates} onZoom={(u, m) => { setZoom(u); setZoomMime(m); }} pdfLabel={t.details.pdfDocument} />
           </div>
 
-          {/* Optional: passport */}
-          {req.images.passport && (
+          {/* Optional: vehicle inspection */}
+          {req.images.inspection && (
             <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <ImgCard label={t.details.passport} url={req.images.passport} onZoom={(u, m) => { setZoom(u); setZoomMime(m); }} pdfLabel={t.details.pdfDocument} />
+              <ImgCard label={t.details.inspection} url={req.images.inspection} onZoom={(u, m) => { setZoom(u); setZoomMime(m); }} pdfLabel={t.details.pdfDocument} />
             </div>
           )}
 

@@ -230,14 +230,14 @@ export async function submitUpload(input: {
   customerName?: string;
   customerEmail?: string;
   images: { registration: File; license: File; emirates: File };
-  optional?: { passport?: File | null; vehiclePhotos?: File[] };
+  optional?: { inspection?: File | null; vehiclePhotos?: File[] };
 }): Promise<{ id: string }> {
   const [registration, license, emirates] = await Promise.all([
     fileToDataUrl(input.images.registration),
     fileToDataUrl(input.images.license),
     fileToDataUrl(input.images.emirates),
   ]);
-  const passport = input.optional?.passport ? await fileToDataUrl(input.optional.passport) : undefined;
+  const inspection = input.optional?.inspection ? await fileToDataUrl(input.optional.inspection) : undefined;
   const vehiclePhotos = input.optional?.vehiclePhotos?.length
     ? await Promise.all(input.optional.vehiclePhotos.map((f) => fileToDataUrl(f)))
     : undefined;
@@ -255,7 +255,7 @@ export async function submitUpload(input: {
     createdAt: new Date().toISOString(),
     customerName: input.customerName,
     customerEmail: input.customerEmail,
-    images: { registration, license, emirates, passport, vehiclePhotos },
+    images: { registration, license, emirates, inspection, vehiclePhotos },
   };
   all.unshift(req);
   writeRequests(all);

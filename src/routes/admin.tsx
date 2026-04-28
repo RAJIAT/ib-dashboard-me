@@ -115,12 +115,12 @@ function AdminDashboard() {
       {/* Filters */}
       <div className="mt-6 rounded-2xl border border-border bg-card p-4 shadow-card">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Select value={agentF} onChange={setAgentF} label={t.admin.filterAgent} all={t.admin.all}
-            options={listAgents().map((a) => ({ value: a.id, label: a.name }))} />
-          <Select value={branchF} onChange={setBranchF} label={t.admin.filterBranch} all={t.admin.all}
-            options={listBranches().map((b) => ({ value: b, label: b }))} />
-          <Select value={statusF} onChange={(v) => setStatusF(v as RequestStatus | "")} label={t.admin.filterStatus} all={t.admin.all}
-            options={(["new", "processing", "sold", "rejected", "reupload"] as RequestStatus[]).map((s) => ({ value: s, label: t.status[s] }))} />
+          <Select value={agentF} onChange={wrap(setAgentF)} label={t.admin.filterAgent} all={t.admin.all}
+            options={agentOptions} />
+          <Select value={branchF} onChange={wrap(setBranchF)} label={t.admin.filterBranch} all={t.admin.all}
+            options={branchOptions} />
+          <Select value={statusF} onChange={(v) => startTransition(() => setStatusF(v as RequestStatus | ""))} label={t.admin.filterStatus} all={t.admin.all}
+            options={statusOptions} />
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">{t.admin.filterDate}</span>
             <input
@@ -132,24 +132,32 @@ function AdminDashboard() {
           </label>
           <button
             onClick={reset}
-            className="h-11 self-end rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground transition hover:bg-muted active:scale-95"
+            className="h-11 self-end rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted active:scale-95"
           >
             {t.admin.reset}
           </button>
         </div>
-        {activeChips.length > 0 && (
+        {(activeChips.length > 0 || isPending) && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">{t.admin.activeFilters}:</span>
+            {activeChips.length > 0 && (
+              <span className="text-xs font-semibold text-muted-foreground">{t.admin.activeFilters}:</span>
+            )}
             {activeChips.map((c, i) => (
               <button
                 key={i}
                 onClick={c.clear}
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary transition hover:bg-primary-soft/70"
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft/70"
               >
                 {c.label}
                 <X className="h-3 w-3" />
               </button>
             ))}
+            {isPending && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-info/10 px-2.5 py-1 text-xs font-semibold text-info animate-fade-in">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {t.common.filtering}
+              </span>
+            )}
           </div>
         )}
       </div>

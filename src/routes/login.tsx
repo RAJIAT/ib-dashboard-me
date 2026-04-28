@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Shield, User } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo } from "@/components/Logo";
 import { useLang } from "@/i18n/LanguageProvider";
@@ -77,7 +77,30 @@ function LoginPage() {
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
             {t.auth.submit}
           </button>
-          <p className="text-xs text-muted-foreground">{t.auth.hint}</p>
+
+          <div className="pt-2">
+            <p className="mb-2 text-center text-xs font-semibold text-muted-foreground">{t.auth.quickFill}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { setEmail("admin@aib.com"); setPassword("demo"); }}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface text-xs font-semibold text-foreground transition hover:bg-muted"
+              >
+                <Shield className="h-3.5 w-3.5" />
+                {t.auth.asAdmin}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEmail("agent@aib.com"); setPassword("demo"); }}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface text-xs font-semibold text-foreground transition hover:bg-muted"
+              >
+                <User className="h-3.5 w-3.5" />
+                {t.auth.asAgent}
+              </button>
+            </div>
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground">{t.auth.hint}</p>
         </form>
       </main>
     </div>

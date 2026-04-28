@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { DashboardShell } from "@/components/DashboardShell";
 import { EmptyState } from "@/components/EmptyState";
 import { AgentFormDialog, type AgentFormValues } from "@/components/AgentFormDialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useLang } from "@/i18n/LanguageProvider";
 import {
   createAgent, deleteAgent, getAgents, getCurrentUser, refreshCurrentUser,
@@ -23,6 +24,7 @@ function AdminAgents() {
   const [dialog, setDialog] = useState<{ open: boolean; mode: "create" | "edit"; target?: Agent }>({
     open: false, mode: "create",
   });
+  const [confirmTarget, setConfirmTarget] = useState<Agent | null>(null);
   const Back = dir === "rtl" ? ArrowRight : ArrowLeft;
 
   useEffect(() => {
@@ -62,9 +64,13 @@ function AdminAgents() {
     toast.success(t.agents.updated);
   };
 
-  const onDelete = async (a: Agent) => {
-    if (!confirm(t.agents.confirmDelete(a.name))) return;
-    await deleteAgent(a.id);
+  const onDelete = (a: Agent) => {
+    setConfirmTarget(a);
+  };
+
+  const confirmDelete = async () => {
+    if (!confirmTarget) return;
+    await deleteAgent(confirmTarget.id);
     toast.success(t.agents.deleted);
   };
 

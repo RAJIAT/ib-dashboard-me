@@ -1,5 +1,6 @@
 import { Camera, Check, RefreshCw, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useLang } from "@/i18n/LanguageProvider";
 
 type Props = {
@@ -9,6 +10,15 @@ type Props = {
   optional?: boolean;
 };
 
+const MAX_BYTES = 2 * 1024 * 1024;
+const ALLOWED = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
+
+function formatBytes(b: number) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(2)} MB`;
+}
+
 export function UploadCard({ label, file, onChange, optional }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { t } = useLang();
@@ -16,7 +26,6 @@ export function UploadCard({ label, file, onChange, optional }: Props) {
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(false);
 
-  // Cleanup object URL.
   useEffect(() => {
     return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -26,14 +35,27 @@ export function UploadCard({ label, file, onChange, optional }: Props) {
 
   const handle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] ?? null;
+    e.target.value = "";
+
+    if (!f) return;
+
+    // Validation
+    if (!ALLOWED.includes(f.type)) {
+      toast.error(t.upload.errors.badType);
+      return;
+    }
+    if (f.size > MAX_BYTES) {
+      toast.error(t.upload.errors.tooLarge);
+      return;
+    }
+
     onChange(f);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(f && f.type.startsWith("image/") ? URL.createObjectURL(f) : null);
+    setPreviewUrl(f.type.startsWith("image/") ? URL.createObjectURL(f) : null);
     setDone(false);
     setProgress(0);
 
-    if (!f) return;
-    // Simulated upload progress (~1.2s).
+    // Simulated upload progress (~1.2s)
     const start = performance.now();
     const total = 1200;
     const tick = () => {
@@ -43,8 +65,6 @@ export function UploadCard({ label, file, onChange, optional }: Props) {
       else setDone(true);
     };
     requestAnimationFrame(tick);
-    // Reset the input so re-selecting the same file fires onChange.
-    e.target.value = "";
   };
 
   const isPdf = file?.type === "application/pdf";
@@ -52,23 +72,28 @@ export function UploadCard({ label, file, onChange, optional }: Props) {
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl border bg-card shadow-card transition ${
+      className={`relative overflow-hidden rounded-2xl border bg-card shadow-card transition-all ${
         file ? (done ? "border-success/40" : "border-primary/40") : "border-border"
       }`}
     >
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,application/pdf"
+        accept="image/jpeg,image/jpg,image/png,application/pdf"
         className="hidden"
         onChange={handle}
       />
       <div className="flex items-center justify-between gap-2 px-4 pt-4">
-        <h3 className="text-base font-semibold text-foreground">
+        <h3 className="flex items-center gap-1.5 text-base font-semibold text-foreground">
           {label}
           {optional && (
-            <span className="ms-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
               {t.upload.optional}
+            </span>
+          )}
+          {isPdf && (
+            <span className="rounded-full bg-info/10 px-2 py-0.5 text-[10px] font-bold text-info">
+              PDF
             </span>
           )}
         </h3>
@@ -96,7 +121,10 @@ export function UploadCard({ label, file, onChange, optional }: Props) {
           ) : (
             <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-primary-soft/40 text-primary">
               <FileText className="h-10 w-10" />
-              <span className="max-w-[80%] truncate text-xs font-medium">{file?.name}</span>
+              <span className="max-w-[80%] truncate text-xs font-semibold">{file?.name}</span>
+              {file && (
+                <span className="text-[10px] text-muted-foreground">{formatBytes(file.size)}</span>
+              )}
             </div>
           )}
           {uploading && (
@@ -107,8 +135,8 @@ export function UploadCard({ label, file, onChange, optional }: Props) {
               />
             </div>
           )}
-          <div className="absolute inset-0 flex items-center justify-center bg-foreground/0 transition group-hover:bg-foreground/40">
-            <span className="inline-flex items-center gap-2 rounded-full bg-surface/90 px-3 py-1.5 text-sm font-medium text-foreground opacity-0 transition group-hover:opacity-100">
+          <div className="absolute inset-0 flex items-center justify-center bg-foreground/0 transition-colors group-hover:bg-foreground/40">
+            <span className="inline-flex items-center gap-2 rounded-full bg-surface/90 px-3 py-1.5 text-sm font-medium text-foreground opacity-0 transition-opacity group-hover:opacity-100">
               <RefreshCw className="h-4 w-4" />
               {t.upload.replace}
             </span>
@@ -118,12 +146,13 @@ export function UploadCard({ label, file, onChange, optional }: Props) {
         <button
           type="button"
           onClick={open}
-          className="m-4 flex aspect-[4/3] w-[calc(100%-2rem)] flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-primary-soft/40 text-primary transition hover:border-primary hover:bg-primary-soft active:scale-[0.99]"
+          className="m-4 flex aspect-[4/3] w-[calc(100%-2rem)] flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border bg-primary-soft/40 text-primary transition-all hover:border-primary hover:bg-primary-soft active:scale-[0.99]"
         >
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
             <Camera className="h-7 w-7" />
           </div>
           <span className="text-sm font-semibold">{t.upload.capture}</span>
+          <span className="text-[10px] font-medium text-muted-foreground">JPG · PNG · PDF · ≤ 2MB</span>
         </button>
       )}
     </div>

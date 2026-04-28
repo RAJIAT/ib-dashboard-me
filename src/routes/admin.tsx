@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, FileText, Inbox, Sparkles, TrendingUp, X } from "lucide-react";
-import { useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState, useTransition } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, FileText, Inbox, Loader2, Sparkles, TrendingUp, X } from "lucide-react";
 import { DashboardShell } from "@/components/DashboardShell";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -9,7 +8,7 @@ import { useLang } from "@/i18n/LanguageProvider";
 import { useRequestsLive } from "@/hooks/useRequestsLive";
 import {
   getCurrentUser, refreshCurrentUser, listAgents, listBranches,
-  type RequestStatus,
+  subscribeAgents, type Agent, type RequestStatus,
 } from "@/services/api";
 
 export const Route = createFileRoute("/admin")({
@@ -25,16 +24,47 @@ function AdminDashboard() {
   const [branchF, setBranchF] = useState("");
   const [statusF, setStatusF] = useState<"" | RequestStatus>("");
   const [dateF, setDateF] = useState("");
+  const [isPending, startTransition] = useTransition();
+
+  // Stable agents/branches snapshot — refreshed only on subscription change.
+  const [agents, setAgents] = useState<Agent[]>(() => listAgents());
+  const branches = useMemo(() => listBranches(), []);
 
   useEffect(() => {
     const u = getCurrentUser();
     if (!u || u.role !== "admin") { navigate({ to: "/login" }); return; }
-    // Re-verify role against the backend so a tampered localStorage role
-    // (e.g. agent edited to "admin" via DevTools) cannot grant access.
     refreshCurrentUser().then((fresh) => {
       if (!fresh || fresh.role !== "admin") navigate({ to: "/login" });
     });
+    const off = subscribeAgents(() => setAgents(listAgents()));
+    return () => off();
   }, [navigate]);
+
+  // Defer date input — only field that fires per keystroke.
+  const deferredDate = useDeferredValue(dateF);
+
+  const agentNameMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of agents) m.set(a.id, a.name);
+    return m;
+  }, [agents]);
+
+  const agentOptions = useMemo(
+    () => agents.map((a) => ({ value: a.id, label: a.name })),
+    [agents],
+  );
+  const branchOptions = useMemo(
+    () => branches.map((b) => ({ value: b, label: b })),
+    [branches],
+  );
+  const statusOptions = useMemo(
+    () =>
+      (["new", "processing", "sold", "rejected", "reupload"] as RequestStatus[]).map((s) => ({
+        value: s,
+        label: t.status[s],
+      })),
+    [t],
+  );
 
   const filtered = useMemo(
     () =>
@@ -42,10 +72,10 @@ function AdminDashboard() {
         if (agentF && r.agentId !== agentF) return false;
         if (branchF && r.branch !== branchF) return false;
         if (statusF && r.status !== statusF) return false;
-        if (dateF && !r.createdAt.startsWith(dateF)) return false;
+        if (deferredDate && !r.createdAt.startsWith(deferredDate)) return false;
         return true;
       }),
-    [items, agentF, branchF, statusF, dateF],
+    [items, agentF, branchF, statusF, deferredDate],
   );
 
   const today = new Date().toISOString().slice(0, 10);
@@ -60,15 +90,17 @@ function AdminDashboard() {
   );
 
   const Chevron = dir === "rtl" ? ChevronLeft : ChevronRight;
-  const reset = () => { setAgentF(""); setBranchF(""); setStatusF(""); setDateF(""); };
+  const reset = () => startTransition(() => {
+    setAgentF(""); setBranchF(""); setStatusF(""); setDateF("");
+  });
 
-  const agentName = (id: string) => listAgents().find((a) => a.id === id)?.name ?? id;
+  const wrap = (fn: (v: string) => void) => (v: string) => startTransition(() => fn(v));
 
   const activeChips: { label: string; clear: () => void }[] = [];
-  if (agentF) activeChips.push({ label: `${t.admin.filterAgent}: ${agentName(agentF)}`, clear: () => setAgentF("") });
-  if (branchF) activeChips.push({ label: `${t.admin.filterBranch}: ${branchF}`, clear: () => setBranchF("") });
-  if (statusF) activeChips.push({ label: `${t.admin.filterStatus}: ${t.status[statusF]}`, clear: () => setStatusF("") });
-  if (dateF) activeChips.push({ label: `${t.admin.filterDate}: ${dateF}`, clear: () => setDateF("") });
+  if (agentF) activeChips.push({ label: `${t.admin.filterAgent}: ${agentNameMap.get(agentF) ?? agentF}`, clear: () => startTransition(() => setAgentF("")) });
+  if (branchF) activeChips.push({ label: `${t.admin.filterBranch}: ${branchF}`, clear: () => startTransition(() => setBranchF("")) });
+  if (statusF) activeChips.push({ label: `${t.admin.filterStatus}: ${t.status[statusF]}`, clear: () => startTransition(() => setStatusF("")) });
+  if (dateF) activeChips.push({ label: `${t.admin.filterDate}: ${dateF}`, clear: () => startTransition(() => setDateF("")) });
 
   return (
     <DashboardShell role="admin" title={t.admin.title}>
@@ -83,12 +115,12 @@ function AdminDashboard() {
       {/* Filters */}
       <div className="mt-6 rounded-2xl border border-border bg-card p-4 shadow-card">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Select value={agentF} onChange={setAgentF} label={t.admin.filterAgent} all={t.admin.all}
-            options={listAgents().map((a) => ({ value: a.id, label: a.name }))} />
-          <Select value={branchF} onChange={setBranchF} label={t.admin.filterBranch} all={t.admin.all}
-            options={listBranches().map((b) => ({ value: b, label: b }))} />
-          <Select value={statusF} onChange={(v) => setStatusF(v as RequestStatus | "")} label={t.admin.filterStatus} all={t.admin.all}
-            options={(["new", "processing", "sold", "rejected", "reupload"] as RequestStatus[]).map((s) => ({ value: s, label: t.status[s] }))} />
+          <Select value={agentF} onChange={wrap(setAgentF)} label={t.admin.filterAgent} all={t.admin.all}
+            options={agentOptions} />
+          <Select value={branchF} onChange={wrap(setBranchF)} label={t.admin.filterBranch} all={t.admin.all}
+            options={branchOptions} />
+          <Select value={statusF} onChange={(v) => startTransition(() => setStatusF(v as RequestStatus | ""))} label={t.admin.filterStatus} all={t.admin.all}
+            options={statusOptions} />
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">{t.admin.filterDate}</span>
             <input
@@ -100,24 +132,32 @@ function AdminDashboard() {
           </label>
           <button
             onClick={reset}
-            className="h-11 self-end rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground transition hover:bg-muted active:scale-95"
+            className="h-11 self-end rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground transition-colors hover:bg-muted active:scale-95"
           >
             {t.admin.reset}
           </button>
         </div>
-        {activeChips.length > 0 && (
+        {(activeChips.length > 0 || isPending) && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground">{t.admin.activeFilters}:</span>
+            {activeChips.length > 0 && (
+              <span className="text-xs font-semibold text-muted-foreground">{t.admin.activeFilters}:</span>
+            )}
             {activeChips.map((c, i) => (
               <button
                 key={i}
                 onClick={c.clear}
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary transition hover:bg-primary-soft/70"
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary-soft/70"
               >
                 {c.label}
                 <X className="h-3 w-3" />
               </button>
             ))}
+            {isPending && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-info/10 px-2.5 py-1 text-xs font-semibold text-info animate-fade-in">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {t.common.filtering}
+              </span>
+            )}
           </div>
         )}
       </div>

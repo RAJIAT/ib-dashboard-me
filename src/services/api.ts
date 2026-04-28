@@ -22,7 +22,7 @@ export type InsuranceRequest = {
     registration: string;
     license: string;
     emirates: string;
-    passport?: string;
+    inspection?: string;
     vehiclePhotos?: string[];
   };
 };

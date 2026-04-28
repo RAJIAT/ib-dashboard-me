@@ -180,6 +180,17 @@ function AdminAgents() {
         onClose={() => setDialog({ open: false, mode: "create" })}
         onSubmit={dialog.mode === "create" ? onCreate : onEdit}
       />
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        destructive
+        title={`${t.agents.deleteWarningTitle}${confirmTarget ? ` — ${confirmTarget.name}` : ""}`}
+        body={t.agents.deleteWarningBody}
+        confirmLabel={t.agents.deleteConfirmCta}
+        cancelLabel={t.agents.cancel}
+        onConfirm={confirmDelete}
+        onClose={() => setConfirmTarget(null)}
+      />
     </DashboardShell>
   );
 }

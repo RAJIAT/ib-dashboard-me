@@ -6,9 +6,8 @@ import { DashboardShell } from "@/components/DashboardShell";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useLang } from "@/i18n/LanguageProvider";
 import { isPdfDataUrl } from "@/lib/imageUtils";
-import { dxFetchAsset, isDirectusAssetUrl } from "@/services/directus";
 import {
-  getCurrentUser, refreshCurrentUser, getRequest, updateRequestStatus,
+  getCurrentUser, refreshCurrentUser, getRequest, updateRequestStatus, resolveAssetUrl,
   type InsuranceRequest, type RequestStatus,
 } from "@/services/api";
 
@@ -223,25 +222,16 @@ function useAssetUrl(url: string): { src: string; mime: string; loading: boolean
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let revoke = "";
     if (!url) { setSrc(""); setMime(""); return; }
-    if (!isDirectusAssetUrl(url)) {
-      // data: or http(s) URL we can use directly.
+    if (!url.startsWith("storage:")) {
       setSrc(url);
       setMime(url.startsWith("data:application/pdf") ? "application/pdf" : "");
       return;
     }
-    const fileId = url.split("/assets/")[1]?.split("?")[0] ?? "";
     setLoading(true);
-    dxFetchAsset(fileId)
-      .then((res) => {
-        if (!res) { setSrc(""); setMime(""); return; }
-        revoke = res.url;
-        setSrc(res.url);
-        setMime(res.mime);
-      })
+    resolveAssetUrl(url)
+      .then((res) => { setSrc(res.url); setMime(res.mime); })
       .finally(() => setLoading(false));
-    return () => { if (revoke) URL.revokeObjectURL(revoke); };
   }, [url]);
 
   return { src, mime, loading };

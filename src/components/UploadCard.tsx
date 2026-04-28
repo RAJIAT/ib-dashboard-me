@@ -6,9 +6,10 @@ type Props = {
   label: string;
   file: File | null;
   onChange: (f: File | null) => void;
+  optional?: boolean;
 };
 
-export function UploadCard({ label, file, onChange }: Props) {
+export function UploadCard({ label, file, onChange, optional }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const { t } = useLang();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);

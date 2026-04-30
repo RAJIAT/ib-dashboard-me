@@ -185,24 +185,43 @@ function RequestDetails() {
           <Back className="h-4 w-4" />
           {t.details.back}
         </Link>
-        {req && allAssets.length > 0 && (
+        {req && (
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={shareByEmail}
-              disabled={sharing || zipping}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground shadow-soft transition hover:bg-muted active:scale-95 disabled:opacity-60"
+              onClick={async () => {
+                const url = `${window.location.origin}/r/${encodeURIComponent(req.id)}`;
+                try {
+                  await navigator.clipboard.writeText(url);
+                  toast.success(t.details.reuploadLinkCopied);
+                } catch {
+                  window.prompt(t.details.copyReuploadLink, url);
+                }
+              }}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground shadow-soft transition hover:bg-muted active:scale-95"
             >
-              {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-              {t.details.shareEmail}
+              <Link2 className="h-4 w-4" />
+              {t.details.copyReuploadLink}
             </button>
-            <button
-              onClick={downloadAllZip}
-              disabled={zipping || sharing}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95 disabled:opacity-60"
-            >
-              {zipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              {t.details.downloadAll}
-            </button>
+            {allAssets.length > 0 && (
+              <>
+                <button
+                  onClick={shareByEmail}
+                  disabled={sharing || zipping}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground shadow-soft transition hover:bg-muted active:scale-95 disabled:opacity-60"
+                >
+                  {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                  {t.details.shareEmail}
+                </button>
+                <button
+                  onClick={downloadAllZip}
+                  disabled={zipping || sharing}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95 disabled:opacity-60"
+                >
+                  {zipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  {t.details.downloadAll}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

@@ -71,9 +71,10 @@ function UploadPage() {
         customerPhone: z
           .string()
           .trim()
-          .min(1, t.upload.errors.phoneRequired)
           .max(20)
-          .regex(/^\+?[0-9\s-]{7,20}$/, t.upload.errors.phoneInvalid),
+          .regex(/^\+?[0-9\s-]{0,20}$/, t.upload.errors.phoneInvalid)
+          .optional()
+          .or(z.literal("")),
       }),
     [t],
   );

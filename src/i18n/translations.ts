@@ -152,7 +152,7 @@ export const translations = {
       shareEmailBody: "مرفق ملف ZIP يحتوي على جميع مستندات الطلب",
       shareEmailHint: "تم تنزيل ملف ZIP — أرفقه بالإيميل قبل الإرسال",
       attachments: "مرفقات إضافية",
-      markLinkSent: "تم إرسال الرابط",
+      markLinkSent: "تم إرسال رابط الدفع",
       copyReuploadLink: "نسخ رابط إكمال النواقص",
       reuploadLinkCopied: "تم نسخ الرابط",
       notesTitle: "ملاحظات ونواقص",

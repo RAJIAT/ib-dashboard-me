@@ -259,6 +259,11 @@ function AdminAgents() {
         mode={dialog.mode}
         initial={dialog.target}
         lockedBranch={lockedBranch}
+        // Supervisors are forced to "agent". Admins:
+        //  - on create, the role selector starts on the active tab
+        //  - on edit, the existing role is locked (cannot be changed)
+        lockedRole={isSupervisor ? "agent" : (dialog.mode === "edit" ? dialog.target?.role : undefined)}
+        defaultRole={effectiveTab}
         onClose={() => setDialog({ open: false, mode: "create" })}
         onSubmit={dialog.mode === "create" ? onCreate : onEdit}
       />

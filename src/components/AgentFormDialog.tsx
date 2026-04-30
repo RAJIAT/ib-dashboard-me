@@ -36,9 +36,9 @@ export function AgentFormDialog({
       email: initial?.email ?? "",
       password: "",
       agentId: initial?.id ?? "",
-      branch: initial?.branch ?? (listBranches()[0] ?? ""),
+      branch: lockedBranch ?? initial?.branch ?? (listBranches()[0] ?? ""),
     });
-  }, [open, initial]);
+  }, [open, initial, lockedBranch]);
 
   if (!open) return null;
 

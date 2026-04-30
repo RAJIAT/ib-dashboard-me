@@ -8,7 +8,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useLang } from "@/i18n/LanguageProvider";
 import { getCurrentUser, type AuthUser } from "@/services/api";
 import {
-  clearAudit, listAudit, subscribeAudit,
+  clearAudit, fetchAudit, subscribeAudit,
   type AuditEntry, type AuditAction, type AuditEntityType,
 } from "@/services/audit";
 
@@ -53,14 +53,12 @@ function AuditPage() {
     }
     setUser(u);
     const refresh = () => {
-      setEntries(
-        listAudit({
-          branch: u.role === "supervisor" ? u.branch : undefined,
-          action: action || undefined,
-          entityType: entityType || undefined,
-          limit: 500,
-        }),
-      );
+      fetchAudit({
+        branch: u.role === "supervisor" ? u.branch : undefined,
+        action: action || undefined,
+        entityType: entityType || undefined,
+        limit: 500,
+      }).then((rows) => setEntries(rows)).catch(() => {});
     };
     refresh();
     const off = subscribeAudit(refresh);
@@ -96,8 +94,8 @@ function AuditPage() {
     toast.success(t.audit.exported);
   };
 
-  const onClear = () => {
-    clearAudit();
+  const onClear = async () => {
+    await clearAudit();
     setConfirmClear(false);
     toast.success(t.audit.cleared);
   };

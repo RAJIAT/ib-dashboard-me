@@ -578,7 +578,7 @@ export function listBranches(): string[] { return BRANCHES; }
 export async function getAgents(): Promise<Agent[]> { return readAgents(); }
 
 export async function createAgent(input: {
-  id: string; name: string; email?: string; branch?: string; role?: AgentRole;
+  id: string; name: string; email?: string; branch?: string; role?: AgentRole; supervisorId?: string;
 }): Promise<Agent> {
   const list = readAgents();
   if (list.some((a) => a.id === input.id)) throw new Error("Agent ID already exists");

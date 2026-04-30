@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Download, RotateCcw, FileText, Loader2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, RotateCcw, FileText, Loader2, X, Mail } from "lucide-react";
 import JSZip from "jszip";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/DashboardShell";
@@ -115,32 +115,59 @@ function RequestDetails() {
     return list;
   }, [req]);
 
+  const buildZipBlob = async (): Promise<Blob | null> => {
+    if (!req) return null;
+    const zip = new JSZip();
+    for (const a of allAssets) {
+      const { url, mime } = await resolveAssetUrl(a.url);
+      if (!url) continue;
+      let blob: Blob;
+      if (url.startsWith("data:")) {
+        blob = dataUrlToBlob(url);
+      } else if (url.startsWith("blob:") || url.startsWith("http")) {
+        blob = await (await fetch(url)).blob();
+      } else {
+        continue;
+      }
+      const ext = extFromMime(mime || blob.type);
+      zip.file(`${a.baseName}.${ext}`, blob);
+    }
+    return await zip.generateAsync({ type: "blob" });
+  };
+
   const downloadAllZip = async () => {
     if (!req || zipping) return;
     setZipping(true);
     try {
-      const zip = new JSZip();
-      for (const a of allAssets) {
-        const { url, mime } = await resolveAssetUrl(a.url);
-        if (!url) continue;
-        let blob: Blob;
-        if (url.startsWith("data:")) {
-          blob = dataUrlToBlob(url);
-        } else if (url.startsWith("blob:") || url.startsWith("http")) {
-          blob = await (await fetch(url)).blob();
-        } else {
-          continue;
-        }
-        const ext = extFromMime(mime || blob.type);
-        zip.file(`${a.baseName}.${ext}`, blob);
-      }
-      const out = await zip.generateAsync({ type: "blob" });
+      const out = await buildZipBlob();
+      if (!out) return;
       triggerDownload(out, `${req.id}.zip`);
       toast.success(t.details.downloadStarted);
     } catch {
       toast.error(t.details.downloadFailed);
     } finally {
       setZipping(false);
+    }
+  };
+
+  const [sharing, setSharing] = useState(false);
+  const shareByEmail = async () => {
+    if (!req || sharing) return;
+    setSharing(true);
+    try {
+      const out = await buildZipBlob();
+      if (!out) return;
+      triggerDownload(out, `${req.id}.zip`);
+      toast.success(t.details.shareEmailHint);
+      const subject = `${t.details.shareEmailSubject} — ${req.id}`;
+      const body = `${t.details.shareEmailBody}\n\n${t.table.agent}: ${req.agentName}\n${t.table.branch}: ${req.branch}\n${t.details.title}: ${req.id}`;
+      const to = req.customerEmail ?? "";
+      const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = mailto;
+    } catch {
+      toast.error(t.details.downloadFailed);
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -158,14 +185,24 @@ function RequestDetails() {
           {t.details.back}
         </Link>
         {req && allAssets.length > 0 && (
-          <button
-            onClick={downloadAllZip}
-            disabled={zipping}
-            className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95 disabled:opacity-60"
-          >
-            {zipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            {t.details.downloadAll}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={shareByEmail}
+              disabled={sharing || zipping}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground shadow-soft transition hover:bg-muted active:scale-95 disabled:opacity-60"
+            >
+              {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+              {t.details.shareEmail}
+            </button>
+            <button
+              onClick={downloadAllZip}
+              disabled={zipping || sharing}
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95 disabled:opacity-60"
+            >
+              {zipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {t.details.downloadAll}
+            </button>
+          </div>
         )}
       </div>
 

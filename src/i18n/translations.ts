@@ -198,6 +198,7 @@ export const translations = {
       emptyTitle: "لا توجد طلبات مطابقة",
       emptySubtitle: "جرّب تعديل الفلاتر أو إعادة تعيينها",
       manageAgents: "الوكلاء والمشرفون",
+      manageBranches: "الفروع",
       auditLog: "سجل التدقيق",
     },
     agents: {

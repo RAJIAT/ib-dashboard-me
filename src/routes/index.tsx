@@ -228,7 +228,7 @@ function UploadPage() {
             </div>
             <div>
               <label htmlFor="customerPhone" className="mb-1.5 block text-xs font-semibold text-foreground">
-                {t.upload.kyc.phoneLabel} <span className="text-destructive">*</span>
+                {t.upload.kyc.phoneLabel}
               </label>
               <input
                 id="customerPhone"

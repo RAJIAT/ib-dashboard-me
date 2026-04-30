@@ -193,42 +193,46 @@ export function isDirectusAssetUrl(url: string) {
 }
 
 // ---------- Requests ----------
-type DxRequest = {
+export type DxRequest = {
   id: string;
   status: string;
   agent_id: string;
   agent_name?: string;
   branch?: string;
   date_created: string;
-  registration: string;
-  license: string;
-  emirates: string;
+  request_display_id?: string;
+  registration?: string;
+  license?: string;
+  emirates?: string;
   passport?: string | null;
-  vehicle_photos?: string[] | null;
   customer_name?: string | null;
   customer_email?: string | null;
+  customer_phone?: string | null;
+  inspection?: string | null;
 };
 
 const REQUEST_FIELDS =
-  "id,status,agent_id,agent_name,branch,date_created,registration,license,emirates,passport,vehicle_photos,customer_name,customer_email";
+  "id,status,agent_id,agent_name,branch,date_created,request_display_id,registration,license,emirates,passport,inspection,customer_name,customer_email,customer_phone";
 
-export async function dxListRequests(opts?: { agentId?: string }): Promise<DxRequest[]> {
+export async function dxListRequests(opts?: { agentId?: string; branch?: string }): Promise<DxRequest[]> {
   const params = new URLSearchParams({
     "fields": REQUEST_FIELDS,
     "sort": "-date_created",
     "limit": "200",
   });
   if (opts?.agentId) params.set("filter[agent_id][_eq]", opts.agentId);
+  if (opts?.branch) params.set("filter[branch][_eq]", opts.branch);
   const json = await dxFetch(`/items/requests?${params.toString()}`);
   return json.data as DxRequest[];
 }
 
 export async function dxGetRequest(id: string): Promise<DxRequest | null> {
   try {
-    const json = await dxFetch(
-      `/items/requests/${encodeURIComponent(id)}?fields=${REQUEST_FIELDS}`,
+    // Try by numeric id first, then by display id.
+    const byId = await dxFetch(
+      `/items/requests?filter[_or][0][id][_eq]=${encodeURIComponent(id)}&filter[_or][1][request_display_id][_eq]=${encodeURIComponent(id)}&fields=${REQUEST_FIELDS}&limit=1`,
     );
-    return json.data as DxRequest;
+    return (byId.data?.[0] as DxRequest) ?? null;
   } catch {
     return null;
   }
@@ -238,18 +242,22 @@ export async function dxCreateRequest(input: {
   agent_id: string;
   agent_name?: string;
   branch?: string;
-  registration: string;
-  license: string;
-  emirates: string;
+  registration?: string | null;
+  license?: string | null;
+  emirates?: string | null;
   passport?: string | null;
-  vehicle_photos?: string[] | null;
+  inspection?: string | null;
   customer_name?: string | null;
   customer_email?: string | null;
+  customer_phone?: string | null;
 }): Promise<DxRequest> {
+  // We always set status=new on creation. We do NOT pass auth:false anymore —
+  // the customer-facing /api/directus proxy sends a public-policy bearer token
+  // upstream when the route is unauthenticated.
   const json = await dxFetch("/items/requests", {
     method: "POST",
     body: JSON.stringify({ ...input, status: "new" }),
-  }, { auth: false });
+  });
   return json.data as DxRequest;
 }
 
@@ -259,6 +267,160 @@ export async function dxUpdateRequestStatus(id: string, status: string): Promise
     body: JSON.stringify({ status }),
   });
   return json.data as DxRequest;
+}
+
+// ---------- Branches ----------
+export type DxBranch = {
+  id: number;
+  name: string;
+  code: string;
+  address?: string;
+  phone?: string;
+  is_active: boolean;
+};
+
+export async function dxListBranches(opts?: { onlyActive?: boolean }): Promise<DxBranch[]> {
+  const params = new URLSearchParams({
+    fields: "id,name,code,address,phone,is_active",
+    sort: "name",
+    limit: "200",
+  });
+  if (opts?.onlyActive) params.set("filter[is_active][_eq]", "true");
+  const json = await dxFetch(`/items/branches?${params.toString()}`);
+  return json.data as DxBranch[];
+}
+
+export async function dxCreateBranch(input: Omit<DxBranch, "id">): Promise<DxBranch> {
+  const json = await dxFetch("/items/branches", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return json.data as DxBranch;
+}
+
+export async function dxUpdateBranch(id: number, patch: Partial<Omit<DxBranch, "id">>): Promise<DxBranch> {
+  const json = await dxFetch(`/items/branches/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  return json.data as DxBranch;
+}
+
+export async function dxDeleteBranch(id: number): Promise<void> {
+  await dxFetch(`/items/branches/${id}`, { method: "DELETE" });
+}
+
+// ---------- Request notes ----------
+export type DxNote = {
+  id: number;
+  request: string;
+  text: string;
+  kind: string;
+  author_id?: string;
+  author_name?: string;
+  author_role?: string;
+  date_created: string;
+  resolved_at?: string | null;
+};
+
+export async function dxListNotes(requestId: string): Promise<DxNote[]> {
+  const params = new URLSearchParams({
+    fields: "id,request,text,kind,author_id,author_name,author_role,date_created,resolved_at",
+    sort: "date_created",
+    limit: "200",
+  });
+  params.set("filter[request][_eq]", requestId);
+  const json = await dxFetch(`/items/request_notes?${params.toString()}`);
+  return json.data as DxNote[];
+}
+
+export async function dxCreateNote(input: {
+  request: string;
+  text: string;
+  kind: string;
+  author_id?: string;
+  author_name?: string;
+  author_role?: string;
+}): Promise<DxNote> {
+  const json = await dxFetch("/items/request_notes", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return json.data as DxNote;
+}
+
+export async function dxResolveNote(noteId: number): Promise<DxNote> {
+  const json = await dxFetch(`/items/request_notes/${noteId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ resolved_at: new Date().toISOString() }),
+  });
+  return json.data as DxNote;
+}
+
+// ---------- Request attachments ----------
+export type DxAttachment = {
+  id: number;
+  request: string;
+  file: string;
+  original_name?: string;
+  date_created: string;
+};
+
+export async function dxListAttachments(requestId: string, missing = false): Promise<DxAttachment[]> {
+  const collection = missing ? "request_missing_attachments" : "request_attachments";
+  const params = new URLSearchParams({
+    fields: "id,request,file,original_name,date_created",
+    sort: "date_created",
+    limit: "200",
+  });
+  params.set("filter[request][_eq]", requestId);
+  const json = await dxFetch(`/items/${collection}?${params.toString()}`);
+  return json.data as DxAttachment[];
+}
+
+export async function dxCreateAttachment(input: {
+  request: string;
+  file: string;
+  original_name?: string;
+}, missing = false): Promise<DxAttachment> {
+  const collection = missing ? "request_missing_attachments" : "request_attachments";
+  const json = await dxFetch(`/items/${collection}`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return json.data as DxAttachment;
+}
+
+// ---------- Vehicle media ----------
+export type DxVehicleMedia = {
+  id: number;
+  request: string;
+  file: string;
+  kind: string;
+  date_created: string;
+};
+
+export async function dxListVehicleMedia(requestId: string): Promise<DxVehicleMedia[]> {
+  const params = new URLSearchParams({
+    fields: "id,request,file,kind,date_created",
+    sort: "date_created",
+    limit: "200",
+  });
+  params.set("filter[request][_eq]", requestId);
+  const json = await dxFetch(`/items/request_vehicle_media?${params.toString()}`);
+  return json.data as DxVehicleMedia[];
+}
+
+export async function dxCreateVehicleMedia(input: {
+  request: string;
+  file: string;
+  kind: "image" | "video";
+}): Promise<DxVehicleMedia> {
+  const json = await dxFetch("/items/request_vehicle_media", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  return json.data as DxVehicleMedia;
 }
 
 // ---------- Users (Agent management — Admin only) ----------
@@ -342,4 +504,3 @@ export async function dxDeleteAgent(id: string): Promise<void> {
   await dxFetch(`/users/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-export type { DxRequest };

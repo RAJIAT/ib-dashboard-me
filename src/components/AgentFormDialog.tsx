@@ -12,13 +12,14 @@ export type AgentFormValues = {
 };
 
 export function AgentFormDialog({
-  open, mode, initial, onClose, onSubmit,
+  open, mode, initial, onClose, onSubmit, lockedBranch,
 }: {
   open: boolean;
   mode: "create" | "edit";
   initial?: Agent;
   onClose: () => void;
   onSubmit: (values: AgentFormValues) => Promise<void>;
+  lockedBranch?: string;
 }) {
   const { t, dir } = useLang();
   const [values, setValues] = useState<AgentFormValues>({

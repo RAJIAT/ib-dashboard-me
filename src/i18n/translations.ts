@@ -146,6 +146,7 @@ export const translations = {
       emptyTitle: "لا توجد طلبات مطابقة",
       emptySubtitle: "جرّب تعديل الفلاتر أو إعادة تعيينها",
       manageAgents: "إدارة الوكلاء",
+      auditLog: "سجل التدقيق",
     },
     agents: {
       title: "إدارة الوكلاء",
@@ -344,6 +345,7 @@ export const translations = {
       emptyTitle: "No matching requests",
       emptySubtitle: "Try adjusting or resetting your filters",
       manageAgents: "Manage Agents",
+      auditLog: "Audit Log",
     },
     agents: {
       title: "Agent Management",

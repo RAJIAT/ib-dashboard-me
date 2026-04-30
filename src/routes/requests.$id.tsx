@@ -156,10 +156,6 @@ function RequestDetails() {
     if (!req || sharing) return;
     setSharing(true);
     try {
-      const out = await buildZipBlob();
-      if (!out) return;
-      triggerDownload(out, `${req.id}.zip`);
-      toast.success(t.details.shareEmailHint);
       const subject = `${t.details.shareEmailSubject} — ${req.id}`;
       const body = `${t.details.shareEmailBody}\n\n${t.table.agent}: ${req.agentName}\n${t.table.branch}: ${req.branch}\n${t.details.title}: ${req.id}`;
       const to = req.customerEmail ?? "";
@@ -187,21 +183,6 @@ function RequestDetails() {
         </Link>
         {req && (
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={async () => {
-                const url = `${window.location.origin}/r/${encodeURIComponent(req.id)}`;
-                try {
-                  await navigator.clipboard.writeText(url);
-                  toast.success(t.details.reuploadLinkCopied);
-                } catch {
-                  window.prompt(t.details.copyReuploadLink, url);
-                }
-              }}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground shadow-soft transition hover:bg-muted active:scale-95"
-            >
-              <Link2 className="h-4 w-4" />
-              {t.details.copyReuploadLink}
-            </button>
             {allAssets.length > 0 && (
               <>
                 <button
@@ -398,11 +379,30 @@ function RequestDetails() {
             </div>
           )}
 
-          {/* Notes & missing items */}
-          <NotesSection
-            req={req}
-            onUpdated={(r) => setReq(r)}
-          />
+          {/* Notes & missing items + copy reupload link */}
+          <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
+            <NotesSection
+              req={req}
+              onUpdated={(r) => setReq(r)}
+            />
+            <div className="lg:pt-1">
+              <button
+                onClick={async () => {
+                  const url = `${window.location.origin}/r/${encodeURIComponent(req.id)}`;
+                  try {
+                    await navigator.clipboard.writeText(url);
+                    toast.success(t.details.reuploadLinkCopied);
+                  } catch {
+                    window.prompt(t.details.copyReuploadLink, url);
+                  }
+                }}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground shadow-soft transition hover:bg-muted active:scale-95 lg:w-auto"
+              >
+                <Link2 className="h-4 w-4" />
+                {t.details.copyReuploadLink}
+              </button>
+            </div>
+          </div>
 
           {/* Actions */}
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

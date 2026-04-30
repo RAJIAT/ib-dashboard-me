@@ -36,7 +36,8 @@ function UploadPage() {
 
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
-  const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [errors, setErrors] = useState<{ name?: string; email?: string; phone?: string }>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -68,20 +69,27 @@ function UploadPage() {
           .min(1, t.upload.errors.emailRequired)
           .email(t.upload.errors.emailInvalid)
           .max(255),
+        customerPhone: z
+          .string()
+          .trim()
+          .min(1, t.upload.errors.phoneRequired)
+          .max(20)
+          .regex(/^\+?[0-9\s-]{7,20}$/, t.upload.errors.phoneInvalid),
       }),
     [t],
   );
 
-  const kycValid = kycSchema.safeParse({ customerName, customerEmail }).success;
+  const kycValid = kycSchema.safeParse({ customerName, customerEmail, customerPhone }).success;
   const ready = docsReady && kycValid;
 
   const onSubmit = async () => {
-    const parsed = kycSchema.safeParse({ customerName, customerEmail });
+    const parsed = kycSchema.safeParse({ customerName, customerEmail, customerPhone });
     if (!parsed.success) {
-      const fieldErrors: { name?: string; email?: string } = {};
+      const fieldErrors: { name?: string; email?: string; phone?: string } = {};
       for (const issue of parsed.error.issues) {
         if (issue.path[0] === "customerName") fieldErrors.name = issue.message;
         if (issue.path[0] === "customerEmail") fieldErrors.email = issue.message;
+        if (issue.path[0] === "customerPhone") fieldErrors.phone = issue.message;
       }
       setErrors(fieldErrors);
       scrollToKyc();
@@ -95,6 +103,7 @@ function UploadPage() {
         agentId: agent ?? "A123",
         customerName: parsed.data.customerName,
         customerEmail: parsed.data.customerEmail,
+        customerPhone: parsed.data.customerPhone,
         images: {
           registration,
           license,
@@ -179,7 +188,7 @@ function UploadPage() {
               <p className="text-xs text-muted-foreground">{t.upload.kyc.subtitle}</p>
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
             <div>
               <label htmlFor="customerName" className="mb-1.5 block text-xs font-semibold text-foreground">
                 {t.upload.kyc.nameLabel} <span className="text-destructive">*</span>
@@ -216,6 +225,26 @@ function UploadPage() {
                 dir="ltr"
               />
               {errors.email && <p className="mt-1 text-xs font-medium text-destructive">{errors.email}</p>}
+            </div>
+            <div>
+              <label htmlFor="customerPhone" className="mb-1.5 block text-xs font-semibold text-foreground">
+                {t.upload.kyc.phoneLabel} <span className="text-destructive">*</span>
+              </label>
+              <input
+                id="customerPhone"
+                type="tel"
+                value={customerPhone}
+                maxLength={20}
+                inputMode="tel"
+                autoComplete="tel"
+                onChange={(e) => { setCustomerPhone(e.target.value); if (errors.phone) setErrors((p) => ({ ...p, phone: undefined })); }}
+                placeholder={t.upload.kyc.phonePlaceholder}
+                className={`h-11 w-full rounded-xl border bg-surface px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 ${
+                  errors.phone ? "border-destructive" : "border-input"
+                }`}
+                dir="ltr"
+              />
+              {errors.phone && <p className="mt-1 text-xs font-medium text-destructive">{errors.phone}</p>}
             </div>
           </div>
         </section>

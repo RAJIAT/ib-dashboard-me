@@ -212,7 +212,7 @@ function RequestDetails() {
           </div>
 
           {/* Customer KYC */}
-          {(req.customerName || req.customerEmail) && (
+          {(req.customerName || req.customerEmail || req.customerPhone) && (
             <div className="mt-4 rounded-2xl border border-border bg-card p-5 shadow-card">
               <h3 className="mb-3 text-sm font-bold text-foreground">{t.details.customer}</h3>
               <div className="grid gap-x-6 gap-y-1 text-sm text-muted-foreground sm:grid-cols-2">
@@ -221,6 +221,9 @@ function RequestDetails() {
                 )}
                 {req.customerEmail && (
                   <div dir="ltr" className="truncate"><span className="font-medium text-foreground">{t.details.customerEmail}:</span> {req.customerEmail}</div>
+                )}
+                {req.customerPhone && (
+                  <div dir="ltr" className="truncate"><span className="font-medium text-foreground">{t.details.customerPhone}:</span> {req.customerPhone}</div>
                 )}
               </div>
             </div>

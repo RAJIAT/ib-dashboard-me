@@ -408,6 +408,7 @@ export const translations = {
     },
     admin: {
       title: "Admin Dashboard",
+      supervisorTitle: "Supervisor Dashboard",
       total: "Total Requests",
       newReq: "New Requests",
       sales: "Sales",

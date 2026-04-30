@@ -111,7 +111,8 @@ export function AgentFormDialog({
               <select
                 value={values.branch}
                 onChange={(e) => setValues((v) => ({ ...v, branch: e.target.value }))}
-                className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground"
+                disabled={!!lockedBranch}
+                className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground disabled:opacity-60"
               >
                 {listBranches().map((b) => <option key={b} value={b}>{b}</option>)}
               </select>

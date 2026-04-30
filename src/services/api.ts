@@ -18,6 +18,7 @@ export type InsuranceRequest = {
   createdAt: string;
   customerName?: string;
   customerEmail?: string;
+  customerPhone?: string;
   images: {
     /** Vehicle registration card images (front + back, in that order). */
     registration: string[];
@@ -348,6 +349,7 @@ export async function submitUpload(input: {
   agentId: string;
   customerName?: string;
   customerEmail?: string;
+  customerPhone?: string;
   images: {
     /** Front + back images of the registration card (in this order). */
     registration: File[];
@@ -389,6 +391,7 @@ export async function submitUpload(input: {
     createdAt: new Date().toISOString(),
     customerName: input.customerName,
     customerEmail: input.customerEmail,
+    customerPhone: input.customerPhone,
     images: { registration, license, emirates, vehicleMedia, inspection },
   };
   all.unshift(req);

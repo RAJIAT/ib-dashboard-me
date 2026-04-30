@@ -5,7 +5,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo } from "@/components/Logo";
 import { ChatWidget } from "@/components/ChatWidget";
 import { useLang } from "@/i18n/LanguageProvider";
-import { canManageAgents, getCurrentUser, logout, type Role } from "@/services/api";
+import { canManageAgents, getCurrentUser, logout, refreshCurrentUser, type Role } from "@/services/api";
 
 type NavItem = { to: string; label: string; icon: ReactNode };
 
@@ -29,12 +29,19 @@ export function DashboardShell({
   const allowed = useMemo(() => (Array.isArray(role) ? role : [role]), [role]);
 
   useEffect(() => {
-    const u = getCurrentUser();
-    setUser(u);
-    setMounted(true);
-    if (!u || !allowed.includes(u.role)) {
-      navigate({ to: "/login" });
-    }
+    let cancelled = false;
+    (async () => {
+      // Verify session against Directus and refresh cached profile.
+      const fresh = await refreshCurrentUser().catch(() => null);
+      if (cancelled) return;
+      const u = fresh ?? getCurrentUser();
+      setUser(u);
+      setMounted(true);
+      if (!u || !allowed.includes(u.role)) {
+        navigate({ to: "/login" });
+      }
+    })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -221,43 +221,40 @@ export function subscribeAgents(cb: () => void): () => void {
 }
 
 // ---------------------------------------------------------------------------
-// Auth (demo)
+// Auth — backed by Directus (with a localStorage cache of the current user
+// so that synchronous getCurrentUser() keeps working as before).
 // ---------------------------------------------------------------------------
 
-const DEMO_USERS: Array<AuthUser & { password: string }> = [
-  {
-    id: "u-admin",
-    email: "admin@aib.com",
-    password: "admin123",
-    name: "Admin",
-    role: "admin",
-  },
-  {
-    id: "u-supervisor",
-    email: "supervisor@aib.com",
-    password: "demo",
-    name: "Demo Supervisor",
-    role: "supervisor",
-    branch: "Abu Dhabi",
-  },
-  {
-    id: "u-agent",
-    email: "agent@aib.com",
-    password: "agent123",
-    name: "Demo Agent",
-    role: "agent",
-    agentId: "A001",
-    branch: "Abu Dhabi",
-  },
-];
+import { dxLogin, dxLogout, dxFetchMe, dxHasSession, isDirectusEnabled } from "./directus";
 
-export async function login(email: string, _password: string): Promise<AuthUser> {
-  // Demo mode: any password is accepted for the demo accounts.
-  const u = DEMO_USERS.find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
-  if (!u) throw new Error("Invalid credentials");
-  const { password: _pw, ...auth } = u;
-  localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
-  // Audit (lazy import to avoid circular dep)
+function mapDxUserToAuth(me: {
+  id: string; email: string;
+  first_name?: string; last_name?: string;
+  role?: { name?: string };
+  agent_id?: string; branch?: string;
+}): AuthUser {
+  const roleName = (me.role?.name ?? "").toLowerCase();
+  let role: Role = "agent";
+  if (roleName.includes("admin")) role = "admin";
+  else if (roleName.includes("supervisor")) role = "supervisor";
+  const name = [me.first_name, me.last_name].filter(Boolean).join(" ").trim() || me.email;
+  return {
+    id: me.id,
+    email: me.email,
+    name,
+    role,
+    agentId: me.agent_id,
+    branch: me.branch,
+  };
+}
+
+export async function login(email: string, password: string): Promise<AuthUser> {
+  if (!isDirectusEnabled()) throw new Error("Backend not configured");
+  const me = await dxLogin(email, password);
+  const auth = mapDxUserToAuth(me);
+  if (typeof window !== "undefined") {
+    localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
+  }
   import("./audit").then(({ logEvent }) =>
     logEvent({
       action: "auth.login",
@@ -271,17 +268,9 @@ export async function login(email: string, _password: string): Promise<AuthUser>
   return auth;
 }
 
-export async function signUp(email: string, _password: string, fullName: string): Promise<AuthUser> {
-  const auth: AuthUser = {
-    id: uuid(),
-    email,
-    name: fullName || email,
-    role: "agent",
-    agentId: "A" + Math.floor(100 + Math.random() * 900),
-    branch: BRANCHES[0],
-  };
-  localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
-  return auth;
+export async function signUp(_email: string, _password: string, _fullName: string): Promise<AuthUser> {
+  // Self-signup is disabled — agents are provisioned by an admin/supervisor.
+  throw new Error("Sign up is disabled. Contact your administrator.");
 }
 
 export async function logout() {
@@ -298,7 +287,8 @@ export async function logout() {
       }),
     );
   }
-  localStorage.removeItem(AUTH_KEY);
+  try { dxLogout(); } catch { /* ignore */ }
+  if (typeof window !== "undefined") localStorage.removeItem(AUTH_KEY);
 }
 
 export function getCurrentUser(): AuthUser | null {
@@ -308,9 +298,24 @@ export function getCurrentUser(): AuthUser | null {
   try { return JSON.parse(raw) as AuthUser; } catch { return null; }
 }
 
+/** Re-fetch the current user from Directus and refresh the local cache. */
 export async function refreshCurrentUser(): Promise<AuthUser | null> {
-  return getCurrentUser();
+  if (typeof window === "undefined") return null;
+  if (!isDirectusEnabled() || !dxHasSession()) {
+    localStorage.removeItem(AUTH_KEY);
+    return null;
+  }
+  try {
+    const me = await dxFetchMe();
+    const auth = mapDxUserToAuth(me);
+    localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
+    return auth;
+  } catch {
+    localStorage.removeItem(AUTH_KEY);
+    return null;
+  }
 }
+
 
 // ---------------------------------------------------------------------------
 // Requests
@@ -572,7 +577,7 @@ export async function appendAttachmentsToRequest(
   return all[idx];
 }
 
-export function isDemoMode() { return true; }
+export function isDemoMode() { return false; }
 
 export function resetDemo() {
   if (typeof window === "undefined") return;
@@ -585,53 +590,93 @@ export function resetDemo() {
 }
 
 // ---------------------------------------------------------------------------
-// Agents directory
+// Agents directory — backed by Directus Users (role = "Agent" or "Supervisor")
 // ---------------------------------------------------------------------------
+
+import {
+  dxListAgents, dxCreateAgent, dxUpdateAgent, dxDeleteAgent, type DxUser,
+} from "./directus";
 
 export type AgentRole = "agent" | "supervisor";
 
 export type Agent = {
+  /** Directus user id (UUID). */
   userId?: string;
+  /** Business agent code (e.g. A001). */
   id: string;
   name: string;
   email?: string;
   branch?: string;
   active: boolean;
-  /** Role of this directory entry. Defaults to "agent" for legacy records. */
   role?: AgentRole;
-  /** For role=agent: id of the supervisor (Agent.id) responsible for this agent. */
   supervisorId?: string;
 };
 
-const DEFAULT_AGENTS: Agent[] = [
-  { id: "A001", name: "Demo Agent", email: "agent@aib.com", branch: "Abu Dhabi", active: true, role: "agent" },
-  { id: "A002", name: "Dubai Agent", branch: "Dubai", active: true, role: "agent" },
-  { id: "S001", name: "Demo Supervisor", email: "supervisor@aib.com", branch: "Abu Dhabi", active: true, role: "supervisor" },
-];
+function dxUserToAgent(u: DxUser): Agent {
+  const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || u.email;
+  const roleName = (u.role?.name ?? "").toLowerCase();
+  const role: AgentRole = roleName.includes("supervisor") ? "supervisor" : "agent";
+  return {
+    userId: u.id,
+    id: u.agent_id || u.id,
+    name,
+    email: u.email,
+    branch: u.branch,
+    active: u.status === "active",
+    role,
+  };
+}
 
-function readAgents(): Agent[] {
-  const list = readJSON<Agent[] | null>(AGENTS_KEY, null);
-  if (!list) {
-    writeJSON(AGENTS_KEY, DEFAULT_AGENTS);
-    return [...DEFAULT_AGENTS];
+// In-memory cache so synchronous listAgents() keeps working for legacy callers.
+let _agentsCache: Agent[] = [];
+const AGENTS_CACHE_KEY = "aib_agents_cache";
+
+function readAgentsCache(): Agent[] {
+  if (_agentsCache.length) return _agentsCache;
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(AGENTS_CACHE_KEY);
+    if (raw) _agentsCache = JSON.parse(raw) as Agent[];
+  } catch { /* ignore */ }
+  return _agentsCache;
+}
+
+function writeAgentsCache(list: Agent[]) {
+  _agentsCache = list;
+  if (typeof window !== "undefined") {
+    try { localStorage.setItem(AGENTS_CACHE_KEY, JSON.stringify(list)); } catch { /* ignore */ }
   }
+  notifyAgentsChange();
+}
+
+/** @deprecated synchronous; use getAgents() to fetch fresh data. */
+export function listAgents(): Agent[] { return readAgentsCache(); }
+export function listBranches(): string[] { return BRANCHES; }
+
+export async function getAgents(): Promise<Agent[]> {
+  const users = await dxListAgents();
+  const list = users.map(dxUserToAgent);
+  writeAgentsCache(list);
   return list;
 }
 
-export function listAgents(): Agent[] { return readAgents(); }
-export function listBranches(): string[] { return BRANCHES; }
-
-export async function getAgents(): Promise<Agent[]> { return readAgents(); }
-
 export async function createAgent(input: {
   id: string; name: string; email?: string; branch?: string; role?: AgentRole; supervisorId?: string;
+  password?: string;
 }): Promise<Agent> {
-  const list = readAgents();
-  if (list.some((a) => a.id === input.id)) throw new Error("Agent ID already exists");
-  const agent: Agent = { ...input, role: input.role ?? "agent", active: true };
-  list.push(agent);
-  writeJSON(AGENTS_KEY, list);
-  notifyAgentsChange();
+  if (!input.email) throw new Error("Email is required");
+  if (!input.password || input.password.length < 6) throw new Error("Password (min 6 chars) is required");
+  const [first_name, ...rest] = input.name.split(" ");
+  const created = await dxCreateAgent({
+    email: input.email,
+    password: input.password,
+    first_name: first_name || input.name,
+    last_name: rest.join(" "),
+    agent_id: input.id,
+    branch: input.branch,
+  });
+  const agent = dxUserToAgent(created);
+  await getAgents(); // refresh cache
   import("./audit").then(({ logEvent }) =>
     logEvent({
       action: "agent.created",
@@ -647,26 +692,26 @@ export async function createAgent(input: {
 
 export async function updateAgent(id: string, patch: Partial<{
   name: string; email: string | null; branch: string | null; active: boolean; supervisorId: string | null;
+  password: string;
 }>): Promise<Agent> {
-  const list = readAgents();
-  const idx = list.findIndex((a) => a.id === id);
-  if (idx === -1) throw new Error("Agent not found");
-  const before = list[idx];
-  const after: Agent = {
-    ...before,
-    ...(patch.name !== undefined ? { name: patch.name } : {}),
-    ...(patch.email !== undefined ? { email: patch.email ?? undefined } : {}),
-    ...(patch.branch !== undefined ? { branch: patch.branch ?? undefined } : {}),
-    ...(patch.active !== undefined ? { active: patch.active } : {}),
-    ...(patch.supervisorId !== undefined ? { supervisorId: patch.supervisorId ?? undefined } : {}),
-  };
-  list[idx] = after;
-  writeJSON(AGENTS_KEY, list);
-  notifyAgentsChange();
-  // Detect changed fields
+  const list = readAgentsCache();
+  const before = list.find((a) => a.id === id || a.userId === id);
+  if (!before || !before.userId) throw new Error("Agent not found");
+  const dxPatch: Parameters<typeof dxUpdateAgent>[1] = {};
+  if (patch.name !== undefined) {
+    const [fn, ...rest] = patch.name.split(" ");
+    dxPatch.first_name = fn || patch.name;
+    dxPatch.last_name = rest.join(" ");
+  }
+  if (patch.branch !== undefined) dxPatch.branch = patch.branch;
+  if (patch.active !== undefined) dxPatch.status = patch.active ? "active" : "suspended";
+  if (patch.password) dxPatch.password = patch.password;
+  const updated = await dxUpdateAgent(before.userId, dxPatch);
+  const after = dxUserToAgent(updated);
+  await getAgents(); // refresh cache
   const changed: Record<string, { before: unknown; after: unknown }> = {};
-  (["name", "email", "branch", "active", "supervisorId"] as const).forEach((k) => {
-    if (before[k] !== after[k]) changed[k] = { before: before[k], after: after[k] };
+  (["name", "email", "branch", "active"] as const).forEach((k) => {
+    if ((before as any)[k] !== (after as any)[k]) changed[k] = { before: (before as any)[k], after: (after as any)[k] };
   });
   let action: "agent.updated" | "agent.activated" | "agent.deactivated" = "agent.updated";
   if (Object.keys(changed).length === 1 && "active" in changed) {
@@ -679,8 +724,7 @@ export async function updateAgent(id: string, patch: Partial<{
       entityId: after.id,
       entityLabel: after.name,
       branch: after.branch ?? null,
-      before,
-      after,
+      before, after,
       meta: { changed: Object.keys(changed) },
     }),
   );
@@ -688,20 +732,19 @@ export async function updateAgent(id: string, patch: Partial<{
 }
 
 export async function deleteAgent(id: string): Promise<void> {
-  const before = readAgents().find((a) => a.id === id);
-  const list = readAgents().filter((a) => a.id !== id);
-  writeJSON(AGENTS_KEY, list);
-  notifyAgentsChange();
-  if (before) {
-    import("./audit").then(({ logEvent }) =>
-      logEvent({
-        action: "agent.deleted",
-        entityType: "agent",
-        entityId: before.id,
-        entityLabel: before.name,
-        branch: before.branch ?? null,
-        before,
-      }),
-    );
-  }
+  const before = readAgentsCache().find((a) => a.id === id || a.userId === id);
+  if (!before || !before.userId) throw new Error("Agent not found");
+  await dxDeleteAgent(before.userId);
+  await getAgents(); // refresh cache
+  import("./audit").then(({ logEvent }) =>
+    logEvent({
+      action: "agent.deleted",
+      entityType: "agent",
+      entityId: before.id,
+      entityLabel: before.name,
+      branch: before.branch ?? null,
+      before,
+    }),
+  );
 }
+

@@ -409,6 +409,7 @@ export const translations = {
       myTasks: "My Tasks",
       logout: "Logout",
       dashboard: "Dashboard",
+      login: "Login",
     },
     table: {
       requestId: "Request ID",

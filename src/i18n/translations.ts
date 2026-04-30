@@ -97,6 +97,7 @@ export const translations = {
       myTasks: "حالاتي",
       logout: "تسجيل الخروج",
       dashboard: "لوحة التحكم",
+      login: "تسجيل الدخول",
     },
     table: {
       requestId: "رقم الطلب",
@@ -408,6 +409,7 @@ export const translations = {
       myTasks: "My Tasks",
       logout: "Logout",
       dashboard: "Dashboard",
+      login: "Login",
     },
     table: {
       requestId: "Request ID",

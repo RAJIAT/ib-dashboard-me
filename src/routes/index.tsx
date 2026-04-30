@@ -1,6 +1,6 @@
-import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
-import { Loader2, Check, ShieldCheck, User, Zap } from "lucide-react";
+import { Loader2, Check, ShieldCheck, User, Zap, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -126,9 +126,19 @@ function UploadPage() {
       <header className="px-4 pt-5">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
           <LanguageSwitcher />
-          {agent && (
-            <span className="text-xs text-muted-foreground">{`Agent: ${agent}`}</span>
-          )}
+          <div className="flex items-center gap-2">
+            {agent ? (
+              <span className="text-xs text-muted-foreground">{`Agent: ${agent}`}</span>
+            ) : (
+              <Link
+                to="/login"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-surface px-3 text-xs font-semibold text-foreground shadow-soft transition hover:bg-muted active:scale-95"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                {t.nav?.login ?? "Login"}
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 

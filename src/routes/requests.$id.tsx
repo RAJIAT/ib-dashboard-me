@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, RotateCcw, FileText, Loader2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ArrowRight, Check, Download, RotateCcw, FileText, Loader2, X } from "lucide-react";
+import JSZip from "jszip";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/DashboardShell";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -8,7 +9,7 @@ import { useLang } from "@/i18n/LanguageProvider";
 import { isPdfDataUrl } from "@/lib/imageUtils";
 import {
   getCurrentUser, refreshCurrentUser, getRequest, updateRequestStatus, resolveAssetUrl,
-  type InsuranceRequest, type RequestStatus,
+  type AuthUser, type InsuranceRequest, type RequestStatus,
 } from "@/services/api";
 
 export const Route = createFileRoute("/requests/$id")({
@@ -16,6 +17,34 @@ export const Route = createFileRoute("/requests/$id")({
 });
 
 type SavingAction = "quote" | "sold" | "reupload" | "select" | null;
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, b64] = dataUrl.split(",");
+  const mime = /:([^;]+);/.exec(meta)?.[1] ?? "application/octet-stream";
+  const bin = atob(b64);
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+function extFromMime(mime: string): string {
+  if (mime === "image/png") return "png";
+  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
+  if (mime === "application/pdf") return "pdf";
+  return "bin";
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
 
 function RequestDetails() {
   const { t, dir, lang } = useLang();
@@ -26,23 +55,30 @@ function RequestDetails() {
   const [savingAction, setSavingAction] = useState<SavingAction>(null);
   const [zoom, setZoom] = useState<string | null>(null);
   const [zoomMime, setZoomMime] = useState<string>("");
+  const [zoomFilename, setZoomFilename] = useState<string>("file");
+  const [zipping, setZipping] = useState(false);
 
-  const user = getCurrentUser();
+  // Read role once on mount; avoids re-running auth checks every render.
+  const [user] = useState<AuthUser | null>(() => getCurrentUser());
   const role = user?.role ?? "agent";
 
   useEffect(() => {
     if (!user) { navigate({ to: "/login" }); return; }
     refreshCurrentUser().then((fresh) => {
-      if (!fresh) { navigate({ to: "/login" }); return; }
+      if (!fresh) navigate({ to: "/login" });
     });
-    getRequest(id).then((r) => { setReq(r); setLoading(false); });
-  }, [id, navigate, user]);
+    let alive = true;
+    getRequest(id).then((r) => { if (alive) { setReq(r); setLoading(false); } });
+    return () => { alive = false; };
+    // run once per id
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const setStatus = async (s: RequestStatus, action: SavingAction) => {
     if (!req || savingAction) return;
+    if (req.status === s) return; // no-op guard
     const previous = req.status;
-    // Optimistic update
-    setReq({ ...req, status: s });
+    setReq({ ...req, status: s }); // optimistic
     setSavingAction(action);
     try {
       const updated = await updateRequestStatus(req.id, s);
@@ -57,9 +93,51 @@ function RequestDetails() {
   };
 
   const saving = savingAction !== null;
+  void role;
+
+  // Build a flat list of all assets for ZIP download.
+  const allAssets = useMemo(() => {
+    if (!req) return [] as { url: string; baseName: string }[];
+    const list: { url: string; baseName: string }[] = [];
+    if (req.images.registration) list.push({ url: req.images.registration, baseName: "registration" });
+    if (req.images.license) list.push({ url: req.images.license, baseName: "license" });
+    if (req.images.emirates) list.push({ url: req.images.emirates, baseName: "emirates" });
+    if (req.images.inspection) list.push({ url: req.images.inspection, baseName: "inspection" });
+    (req.images.vehiclePhotos ?? []).forEach((u, i) => list.push({ url: u, baseName: `vehicle_${i + 1}` }));
+    return list;
+  }, [req]);
+
+  const downloadAllZip = async () => {
+    if (!req || zipping) return;
+    setZipping(true);
+    try {
+      const zip = new JSZip();
+      for (const a of allAssets) {
+        const { url, mime } = await resolveAssetUrl(a.url);
+        if (!url) continue;
+        let blob: Blob;
+        if (url.startsWith("data:")) {
+          blob = dataUrlToBlob(url);
+        } else if (url.startsWith("blob:") || url.startsWith("http")) {
+          blob = await (await fetch(url)).blob();
+        } else {
+          continue;
+        }
+        const ext = extFromMime(mime || blob.type);
+        zip.file(`${a.baseName}.${ext}`, blob);
+      }
+      const out = await zip.generateAsync({ type: "blob" });
+      triggerDownload(out, `${req.id}.zip`);
+      toast.success(t.details.downloadStarted);
+    } catch {
+      toast.error(t.details.downloadFailed);
+    } finally {
+      setZipping(false);
+    }
+  };
 
   const Back = dir === "rtl" ? ArrowRight : ArrowLeft;
-  const backTo = role === "admin" ? "/admin" : "/agent";
+  const backTo = role === "agent" ? "/agent" : "/admin";
 
   return (
     <DashboardShell role={role} title={t.details.title}>

@@ -64,6 +64,17 @@ function AdminDashboard() {
     return m;
   }, [agents]);
 
+  const supervisorByAgentId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of agents) {
+      if (a.role === "agent" && a.supervisorId) {
+        const sup = agents.find((x) => x.id === a.supervisorId);
+        if (sup) m.set(a.id, sup.name);
+      }
+    }
+    return m;
+  }, [agents]);
+
   const agentOptions = useMemo(
     () => agents.map((a) => ({ value: a.id, label: a.name })),
     [agents],

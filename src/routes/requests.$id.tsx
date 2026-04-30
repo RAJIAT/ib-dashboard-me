@@ -610,6 +610,23 @@ function NotesSection({
     }
   };
 
+  const copyReuploadLink = async () => {
+    const url = `${window.location.origin}/r/${encodeURIComponent(req.id)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(t.details.reuploadLinkCopied);
+    } catch {
+      window.prompt(t.details.copyReuploadLink, url);
+    }
+  };
+
+    } catch {
+      toast.error("Failed");
+    } finally {
+      setResolvingId(null);
+    }
+  };
+
   const notes = req.notes ?? [];
   const fmt = (iso: string) =>
     new Date(iso).toLocaleString(lang === "ar" ? "ar-AE" : "en-GB", {

@@ -111,7 +111,7 @@ export const translations = {
     },
     status: {
       new: "جديد",
-      linkSent: "تم إرسال الرابط",
+      linkSent: "تم إرسال رابط الدفع",
       processing: "قيد المعالجة",
       sold: "مباع",
       rejected: "مرفوض",

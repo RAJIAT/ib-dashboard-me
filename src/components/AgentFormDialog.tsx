@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Lock, Loader2, X } from "lucide-react";
 import { useLang } from "@/i18n/LanguageProvider";
-import { listBranches, type Agent } from "@/services/api";
+import { listBranches, type Agent, type AgentRole } from "@/services/api";
 
 export type AgentFormValues = {
   name: string;
@@ -9,6 +9,7 @@ export type AgentFormValues = {
   password: string;
   agentId: string;
   branch: string;
+  role: AgentRole;
 };
 
 export function AgentFormDialog({

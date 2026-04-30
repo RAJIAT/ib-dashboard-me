@@ -61,6 +61,8 @@ export type InsuranceRequest = {
     inspection?: string;
     /** Free-form attachments (images, PDF, docs — no video). */
     attachments: AttachmentMeta[];
+    /** Attachments uploaded by the customer via the missing-docs reupload link. */
+    missingAttachments?: AttachmentMeta[];
   };
 };
 

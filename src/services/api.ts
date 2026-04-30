@@ -553,6 +553,8 @@ export type Agent = {
   active: boolean;
   /** Role of this directory entry. Defaults to "agent" for legacy records. */
   role?: AgentRole;
+  /** For role=agent: id of the supervisor (Agent.id) responsible for this agent. */
+  supervisorId?: string;
 };
 
 const DEFAULT_AGENTS: Agent[] = [

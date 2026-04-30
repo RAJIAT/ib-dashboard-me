@@ -423,7 +423,7 @@ export const translations = {
     },
     status: {
       new: "New",
-      linkSent: "Link sent",
+      linkSent: "Payment link sent",
       processing: "Processing",
       sold: "Sold",
       rejected: "Rejected",

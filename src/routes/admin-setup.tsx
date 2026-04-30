@@ -222,7 +222,7 @@ function AdminSetupPage() {
             <CardDescription>هذه الصفحة للمسؤولين فقط (Administrator).</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link to="/dashboard" className="text-primary underline">
+            <Link to="/admin" className="text-primary underline">
               العودة للوحة التحكم
             </Link>
           </CardContent>

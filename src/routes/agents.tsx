@@ -246,17 +246,19 @@ function StatusPill({ active, t }: { active: boolean; t: any }) {
 }
 
 function IconBtn({
-  children, onClick, label, danger,
-}: { children: React.ReactNode; onClick: () => void; label: string; danger?: boolean }) {
+  children, onClick, label, danger, disabledLook,
+}: { children: React.ReactNode; onClick: () => void; label: string; danger?: boolean; disabledLook?: boolean }) {
   return (
     <button
       onClick={onClick}
       title={label}
       aria-label={label}
       className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition active:scale-95 ${
-        danger
-          ? "border-destructive/30 text-destructive hover:bg-destructive/10"
-          : "border-border text-foreground hover:bg-muted"
+        disabledLook
+          ? "cursor-not-allowed border-border text-muted-foreground/60 opacity-60 hover:bg-muted/40"
+          : danger
+            ? "border-destructive/30 text-destructive hover:bg-destructive/10"
+            : "border-border text-foreground hover:bg-muted"
       }`}
     >
       {children}

@@ -290,12 +290,30 @@ function RequestDetails() {
           className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-foreground/85 p-4"
           onClick={() => { setZoom(null); setZoomMime(""); }}
         >
-          <button
-            onClick={() => { setZoom(null); setZoomMime(""); }}
-            className="absolute top-4 right-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface text-foreground shadow-soft transition hover:bg-muted"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="absolute top-4 right-4 flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                try {
+                  let blob: Blob;
+                  if (zoom.startsWith("data:")) blob = dataUrlToBlob(zoom);
+                  else { window.open(zoom, "_blank"); return; }
+                  const ext = extFromMime(zoomMime || blob.type);
+                  triggerDownload(blob, `${zoomFilename}.${ext}`);
+                } catch { toast.error(t.details.downloadFailed); }
+              }}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full bg-surface px-3 text-sm font-semibold text-foreground shadow-soft transition hover:bg-muted"
+            >
+              <Download className="h-4 w-4" />
+              {t.details.download}
+            </button>
+            <button
+              onClick={() => { setZoom(null); setZoomMime(""); }}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface text-foreground shadow-soft transition hover:bg-muted"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
           {isPdfDataUrl(zoom) || zoomMime === "application/pdf" ? (
             <iframe
               src={zoom}
@@ -344,32 +362,63 @@ function useAssetUrl(url: string): { src: string; mime: string; loading: boolean
 }
 
 function ImgCard({
-  label, url, onZoom, pdfLabel,
-}: { label: string; url: string; onZoom: (u: string, mime: string) => void; pdfLabel: string }) {
+  label, baseName, url, onZoom, pdfLabel, downloadLabel,
+}: {
+  label: string; baseName: string; url: string;
+  onZoom: (u: string, mime: string, filename: string) => void;
+  pdfLabel: string; downloadLabel: string;
+}) {
   const { src, mime, loading } = useAssetUrl(url);
   const pdf = isPdfDataUrl(src) || mime === "application/pdf";
+  const onDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!src) return;
+    try {
+      let blob: Blob;
+      if (src.startsWith("data:")) blob = dataUrlToBlob(src);
+      else { window.open(src, "_blank"); return; }
+      const ext = extFromMime(mime || blob.type);
+      triggerDownload(blob, `${baseName}.${ext}`);
+    } catch { /* noop */ }
+  };
   return (
-    <button
-      onClick={() => src && onZoom(src, mime)}
-      className="group block overflow-hidden rounded-2xl border border-border bg-card text-start shadow-card transition hover:shadow-elevated active:scale-[0.99]"
+    <div
+      className="group relative overflow-hidden rounded-2xl border border-border bg-card text-start shadow-card transition hover:shadow-elevated"
     >
-      <div className="aspect-[4/3] w-full overflow-hidden bg-muted">
-        {pdf ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-primary-soft/40 text-primary">
-            <FileText className="h-12 w-12" />
-            <span className="text-xs font-semibold">{pdfLabel}</span>
-          </div>
-        ) : src ? (
-          <img src={src} alt={label} className="h-full w-full object-cover transition group-hover:scale-105" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-            {loading ? "…" : "—"}
-          </div>
-        )}
-      </div>
-      <div className="px-4 py-3">
-        <div className="text-sm font-semibold text-foreground">{label}</div>
-      </div>
-    </button>
+      <button
+        type="button"
+        onClick={() => src && onZoom(src, mime, baseName)}
+        className="block w-full text-start active:scale-[0.99]"
+      >
+        <div className="aspect-[4/3] w-full overflow-hidden bg-muted">
+          {pdf ? (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-primary-soft/40 text-primary">
+              <FileText className="h-12 w-12" />
+              <span className="text-xs font-semibold">{pdfLabel}</span>
+            </div>
+          ) : src ? (
+            <img src={src} alt={label} className="h-full w-full object-cover transition group-hover:scale-105" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+              {loading ? "…" : "—"}
+            </div>
+          )}
+        </div>
+        <div className="px-4 py-3">
+          <div className="text-sm font-semibold text-foreground">{label}</div>
+        </div>
+      </button>
+      {src && (
+        <button
+          type="button"
+          onClick={onDownload}
+          aria-label={downloadLabel}
+          title={downloadLabel}
+          className="absolute top-2 end-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-surface/95 text-foreground shadow-soft transition hover:bg-muted active:scale-95"
+        >
+          <Download className="h-4 w-4" />
+        </button>
+      )}
+    </div>
   );
 }

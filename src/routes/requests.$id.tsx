@@ -183,21 +183,6 @@ function RequestDetails() {
         </Link>
         {req && (
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={async () => {
-                const url = `${window.location.origin}/r/${encodeURIComponent(req.id)}`;
-                try {
-                  await navigator.clipboard.writeText(url);
-                  toast.success(t.details.reuploadLinkCopied);
-                } catch {
-                  window.prompt(t.details.copyReuploadLink, url);
-                }
-              }}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground shadow-soft transition hover:bg-muted active:scale-95"
-            >
-              <Link2 className="h-4 w-4" />
-              {t.details.copyReuploadLink}
-            </button>
             {allAssets.length > 0 && (
               <>
                 <button

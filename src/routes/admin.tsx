@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useLang } from "@/i18n/LanguageProvider";
 import { useRequestsLive } from "@/hooks/useRequestsLive";
 import {
-  getCurrentUser, refreshCurrentUser, listAgents, listBranches,
+  getCurrentUser, refreshCurrentUser, listAgents, getAgents, listBranches,
   subscribeAgents, type Agent, type AuthUser, type RequestStatus,
 } from "@/services/api";
 
@@ -50,6 +50,7 @@ function AdminDashboard() {
     refreshCurrentUser().then((fresh) => {
       if (!fresh || (fresh.role !== "admin" && fresh.role !== "supervisor")) navigate({ to: "/login" });
     });
+    getAgents().then(setAgents).catch(() => {});
     const off = subscribeAgents(() => setAgents(listAgents()));
     return () => off();
     // eslint-disable-next-line react-hooks/exhaustive-deps

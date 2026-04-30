@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Loader2, Check, LogIn, ShieldCheck, User, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -7,6 +7,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo } from "@/components/Logo";
 import { UploadCard } from "@/components/UploadCard";
 import { MultiUploadCard } from "@/components/MultiUploadCard";
+import { VideoUploadCard } from "@/components/VideoUploadCard";
 import { useLang } from "@/i18n/LanguageProvider";
 import { submitUpload } from "@/services/api";
 
@@ -24,20 +25,45 @@ function UploadPage() {
   const navigate = useNavigate();
   const { agent } = useSearch({ from: "/" });
 
-  const [registration, setRegistration] = useState<File | null>(null);
+  const [registrationFront, setRegistrationFront] = useState<File | null>(null);
+  const [registrationBack, setRegistrationBack] = useState<File | null>(null);
   const [license, setLicense] = useState<File | null>(null);
-  const [emirates, setEmirates] = useState<File | null>(null);
+  const [emiratesFront, setEmiratesFront] = useState<File | null>(null);
+  const [emiratesBack, setEmiratesBack] = useState<File | null>(null);
   const [inspection, setInspection] = useState<File | null>(null);
   const [vehiclePhotos, setVehiclePhotos] = useState<File[]>([]);
+  const [vehicleVideo, setVehicleVideo] = useState<File | null>(null);
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
-  const uploaded = [registration, license, emirates].filter(Boolean).length;
-  const docsReady = uploaded === 3;
-  const remaining = 3 - uploaded;
+  const kycRef = useRef<HTMLElement | null>(null);
+  const scrollToKyc = () => {
+    kycRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const requiredCards: Array<{ key: string; label: string; file: File | null; set: (f: File | null) => void }> = useMemo(
+    () => [
+      { key: "registrationFront", label: t.upload.cards.registrationFront, file: registrationFront, set: setRegistrationFront },
+      { key: "registrationBack", label: t.upload.cards.registrationBack, file: registrationBack, set: setRegistrationBack },
+      { key: "license", label: t.upload.cards.license, file: license, set: setLicense },
+      { key: "emiratesFront", label: t.upload.cards.emiratesFront, file: emiratesFront, set: setEmiratesFront },
+      { key: "emiratesBack", label: t.upload.cards.emiratesBack, file: emiratesBack, set: setEmiratesBack },
+    ],
+    [t, registrationFront, registrationBack, license, emiratesFront, emiratesBack],
+  );
+
+  const minVehiclePhotos = 2;
+  const requiredFiles = [registrationFront, registrationBack, license, emiratesFront, emiratesBack];
+  const uploadedDocs = requiredFiles.filter(Boolean).length;
+  const photosOk = vehiclePhotos.length >= minVehiclePhotos;
+  const videoOk = !!vehicleVideo;
+  const allRequiredCount = requiredFiles.length + 1 /* video */ + 1 /* photos group */;
+  const completedCount = uploadedDocs + (videoOk ? 1 : 0) + (photosOk ? 1 : 0);
+  const docsReady = completedCount === allRequiredCount;
+  const remaining = allRequiredCount - completedCount;
 
   const kycSchema = useMemo(
     () =>
@@ -61,15 +87,6 @@ function UploadPage() {
   const kycValid = kycSchema.safeParse({ customerName, customerEmail }).success;
   const ready = docsReady && kycValid;
 
-  const cards = useMemo(
-    () => [
-      { key: "registration", label: t.upload.cards.registration, file: registration, set: setRegistration },
-      { key: "license", label: t.upload.cards.license, file: license, set: setLicense },
-      { key: "emirates", label: t.upload.cards.emirates, file: emirates, set: setEmirates },
-    ],
-    [t, registration, license, emirates],
-  );
-
   const onSubmit = async () => {
     const parsed = kycSchema.safeParse({ customerName, customerEmail });
     if (!parsed.success) {
@@ -79,18 +96,30 @@ function UploadPage() {
         if (issue.path[0] === "customerEmail") fieldErrors.email = issue.message;
       }
       setErrors(fieldErrors);
+      scrollToKyc();
       return;
     }
     setErrors({});
-    if (!docsReady || !registration || !license || !emirates) return;
+    if (!photosOk) {
+      toast.error(t.upload.errors.minVehiclePhotos);
+      return;
+    }
+    if (!registrationFront || !registrationBack || !license || !emiratesFront || !emiratesBack || !vehicleVideo) return;
     setSubmitting(true);
     try {
       const { id } = await submitUpload({
         agentId: agent ?? "A123",
         customerName: parsed.data.customerName,
         customerEmail: parsed.data.customerEmail,
-        images: { registration, license, emirates },
-        optional: { inspection, vehiclePhotos },
+        images: {
+          registrationFront,
+          registrationBack,
+          license,
+          emiratesFront,
+          emiratesBack,
+          vehiclePhotos,
+        },
+        optional: { inspection, vehicleVideo },
       });
       setDone(true);
       setTimeout(() => navigate({ to: "/success", search: { id } }), 600);
@@ -124,7 +153,14 @@ function UploadPage() {
 
       <main className="mx-auto max-w-2xl px-4 pt-6">
         <div className="flex flex-col items-center text-center">
-          <Logo size={56} />
+          <button
+            type="button"
+            onClick={scrollToKyc}
+            aria-label={t.upload.kyc.title}
+            className="rounded-full transition hover:opacity-80 active:scale-95 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <Logo size={56} />
+          </button>
           <h1 className="mt-5 text-2xl font-bold leading-tight text-foreground sm:text-3xl">
             {t.upload.title}
           </h1>
@@ -132,7 +168,6 @@ function UploadPage() {
             {t.upload.subtitle}
           </p>
 
-          {/* Trust + value prop (moved from footer) */}
           <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary-soft px-3 py-1.5 text-xs font-semibold text-primary">
             <ShieldCheck className="h-3.5 w-3.5" />
             <span>{t.hero.trust}</span>
@@ -147,7 +182,12 @@ function UploadPage() {
         </div>
 
         {/* KYC card */}
-        <section className="mt-8 rounded-2xl border border-border bg-card p-5 shadow-card" dir={dir}>
+        <section
+          ref={kycRef}
+          id="kyc-section"
+          className="mt-8 scroll-mt-6 rounded-2xl border border-border bg-card p-5 shadow-card"
+          dir={dir}
+        >
           <div className="mb-4 flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
               <User className="h-4 w-4" />
@@ -198,11 +238,29 @@ function UploadPage() {
           </div>
         </section>
 
+        {/* Required documents */}
         <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" dir={dir}>
-          {cards.map((c) => (
+          {requiredCards.map((c) => (
             <UploadCard key={c.key} label={c.label} file={c.file} onChange={c.set} />
           ))}
         </section>
+
+        {/* Required vehicle media */}
+        <section className="mt-6 grid gap-4 sm:grid-cols-2" dir={dir}>
+          <MultiUploadCard
+            label={t.upload.cards.vehiclePhotos}
+            files={vehiclePhotos}
+            onChange={setVehiclePhotos}
+          />
+          <VideoUploadCard
+            label={t.upload.cards.vehicleVideo}
+            file={vehicleVideo}
+            onChange={setVehicleVideo}
+          />
+        </section>
+        <p className="mt-2 text-center text-xs text-muted-foreground" dir={dir}>
+          {t.upload.vehiclePhotosHint}
+        </p>
 
         <p className="mt-5 text-center text-sm font-medium text-muted-foreground">
           {docsReady ? t.upload.allDone : t.upload.remaining(remaining)}
@@ -214,12 +272,6 @@ function UploadPage() {
             label={t.upload.cards.inspection}
             file={inspection}
             onChange={setInspection}
-            optional
-          />
-          <MultiUploadCard
-            label={t.upload.cards.vehiclePhotos}
-            files={vehiclePhotos}
-            onChange={setVehiclePhotos}
             optional
           />
         </section>

@@ -19,11 +19,18 @@ export type InsuranceRequest = {
   customerName?: string;
   customerEmail?: string;
   images: {
-    registration: string;
+    registrationFront: string;
+    registrationBack: string;
     license: string;
-    emirates: string;
+    emiratesFront: string;
+    emiratesBack: string;
+    vehiclePhotos: string[];
+    vehicleVideo?: { name: string; size: number; type: string };
     inspection?: string;
-    vehiclePhotos?: string[];
+    /** @deprecated legacy single registration image (pre split). */
+    registration?: string;
+    /** @deprecated legacy single emirates image (pre split). */
+    emirates?: string;
   };
 };
 
@@ -234,7 +241,21 @@ export async function refreshCurrentUser(): Promise<AuthUser | null> {
 // ---------------------------------------------------------------------------
 
 function readRequests(): InsuranceRequest[] {
-  return readJSON<InsuranceRequest[]>(REQUESTS_KEY, []);
+  const list = readJSON<InsuranceRequest[]>(REQUESTS_KEY, []);
+  // Migration: older requests stored single registration/emirates fields.
+  return list.map((r) => {
+    const img = r.images as InsuranceRequest["images"] & { registration?: string; emirates?: string };
+    if (img.registration && !img.registrationFront) {
+      img.registrationFront = img.registration;
+      img.registrationBack = img.registrationBack ?? "";
+    }
+    if (img.emirates && !img.emiratesFront) {
+      img.emiratesFront = img.emirates;
+      img.emiratesBack = img.emiratesBack ?? "";
+    }
+    if (!img.vehiclePhotos) img.vehiclePhotos = [];
+    return r;
+  });
 }
 
 function writeRequests(list: InsuranceRequest[]) {
@@ -291,17 +312,29 @@ export async function submitUpload(input: {
   agentId: string;
   customerName?: string;
   customerEmail?: string;
-  images: { registration: File; license: File; emirates: File };
-  optional?: { inspection?: File | null; vehiclePhotos?: File[] };
+  images: {
+    registrationFront: File;
+    registrationBack: File;
+    license: File;
+    emiratesFront: File;
+    emiratesBack: File;
+    vehiclePhotos: File[];
+  };
+  optional?: { inspection?: File | null; vehicleVideo?: File | null };
 }): Promise<{ id: string }> {
-  const [registration, license, emirates] = await Promise.all([
-    fileToDataUrl(input.images.registration),
+  const [registrationFront, registrationBack, license, emiratesFront, emiratesBack] = await Promise.all([
+    fileToDataUrl(input.images.registrationFront),
+    fileToDataUrl(input.images.registrationBack),
     fileToDataUrl(input.images.license),
-    fileToDataUrl(input.images.emirates),
+    fileToDataUrl(input.images.emiratesFront),
+    fileToDataUrl(input.images.emiratesBack),
   ]);
+  const vehiclePhotos = await Promise.all(input.images.vehiclePhotos.map((f) => fileToDataUrl(f)));
   const inspection = input.optional?.inspection ? await fileToDataUrl(input.optional.inspection) : undefined;
-  const vehiclePhotos = input.optional?.vehiclePhotos?.length
-    ? await Promise.all(input.optional.vehiclePhotos.map((f) => fileToDataUrl(f)))
+  // Demo mode: avoid storing the full video data URL in localStorage (quota
+  // limits ~5MB). Store metadata only — the real upload happens in backend mode.
+  const vehicleVideo = input.optional?.vehicleVideo
+    ? { name: input.optional.vehicleVideo.name, size: input.optional.vehicleVideo.size, type: input.optional.vehicleVideo.type }
     : undefined;
 
   const agent = listAgents().find((a) => a.id === input.agentId);
@@ -317,7 +350,7 @@ export async function submitUpload(input: {
     createdAt: new Date().toISOString(),
     customerName: input.customerName,
     customerEmail: input.customerEmail,
-    images: { registration, license, emirates, inspection, vehiclePhotos },
+    images: { registrationFront, registrationBack, license, emiratesFront, emiratesBack, vehiclePhotos, inspection, vehicleVideo },
   };
   all.unshift(req);
   writeRequests(all);

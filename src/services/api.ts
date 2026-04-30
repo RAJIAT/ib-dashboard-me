@@ -19,18 +19,18 @@ export type InsuranceRequest = {
   customerName?: string;
   customerEmail?: string;
   images: {
-    registrationFront: string;
-    registrationBack: string;
+    /** Vehicle registration card images (front + back, in that order). */
+    registration: string[];
+    /** Driving license image. */
     license: string;
-    emiratesFront: string;
-    emiratesBack: string;
-    vehiclePhotos: string[];
-    vehicleVideo?: { name: string; size: number; type: string };
+    /** Emirates ID images (front + back, in that order). */
+    emirates: string[];
+    /** Vehicle media: photos (data URLs) + video metadata in demo mode. */
+    vehicleMedia: Array<
+      | { kind: "image"; url: string }
+      | { kind: "video"; name: string; size: number; type: string }
+    >;
     inspection?: string;
-    /** @deprecated legacy single registration image (pre split). */
-    registration?: string;
-    /** @deprecated legacy single emirates image (pre split). */
-    emirates?: string;
   };
 };
 

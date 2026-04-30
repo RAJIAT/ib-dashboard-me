@@ -71,6 +71,7 @@ export const translations = {
       quickFill: "تعبئة سريعة",
       asAdmin: "كمسؤول",
       asAgent: "كوكيل",
+      asSupervisor: "كمشرف",
       invalid: "بيانات الدخول غير صحيحة",
     },
     nav: {
@@ -267,6 +268,7 @@ export const translations = {
       quickFill: "Quick fill",
       asAdmin: "as Admin",
       asAgent: "as Agent",
+      asSupervisor: "as Supervisor",
       invalid: "Invalid credentials",
     },
     nav: {

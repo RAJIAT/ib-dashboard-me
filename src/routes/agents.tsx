@@ -10,7 +10,7 @@ import { useLang } from "@/i18n/LanguageProvider";
 import {
   canDeleteAgents,
   createAgent, deleteAgent, getAgents, getCurrentUser, refreshCurrentUser,
-  subscribeAgents, updateAgent, type Agent, type AuthUser,
+  subscribeAgents, updateAgent, type Agent, type AgentRole, type AuthUser,
 } from "@/services/api";
 
 export const Route = createFileRoute("/agents")({
@@ -21,8 +21,9 @@ function AdminAgents() {
   const { t, dir } = useLang();
   const navigate = useNavigate();
   const [user, setUser] = useState<AuthUser | null>(() => getCurrentUser());
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<AgentRole>("agent");
   const [dialog, setDialog] = useState<{ open: boolean; mode: "create" | "edit"; target?: Agent }>({
     open: false, mode: "create",
   });
@@ -30,8 +31,14 @@ function AdminAgents() {
   const Back = dir === "rtl" ? ArrowRight : ArrowLeft;
 
   const isSupervisor = user?.role === "supervisor";
+  const isAdmin = user?.role === "admin";
   const lockedBranch = isSupervisor ? user?.branch : undefined;
   const canDelete = canDeleteAgents(user);
+
+  // Supervisors can only see/manage agents in their own branch — never the
+  // supervisors tab.
+  const effectiveTab: AgentRole = isSupervisor ? "agent" : tab;
+  const agents = allAgents.filter((a) => (a.role ?? "agent") === effectiveTab);
 
   useEffect(() => {
     const u = getCurrentUser();
@@ -44,7 +51,7 @@ function AdminAgents() {
         const filtered = u.role === "supervisor" && u.branch
           ? list.filter((a) => a.branch === u.branch)
           : list;
-        setAgents(filtered);
+        setAllAgents(filtered);
         setLoading(false);
       });
     };
@@ -62,6 +69,8 @@ function AdminAgents() {
     await createAgent({
       id: v.agentId, name: v.name, email: v.email,
       branch: lockedBranch ?? v.branch,
+      // Supervisors can only ever create plain agents; admins use the form's role.
+      role: isSupervisor ? "agent" : v.role,
     });
     toast.success(t.agents.created);
   };
@@ -91,8 +100,12 @@ function AdminAgents() {
     toast.success(t.agents.deleted);
   };
 
+  const isSupervisorTab = effectiveTab === "supervisor";
+  const addLabel = isSupervisorTab ? t.agents.addSupervisor : t.agents.add;
+  const emptyLabel = isSupervisorTab ? t.agents.emptySupervisors : t.agents.empty;
+
   return (
-    <DashboardShell role="admin" title={t.agents.title}>
+    <DashboardShell role={["admin", "supervisor"]} title={t.agents.title}>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link
@@ -109,9 +122,38 @@ function AdminAgents() {
           className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95"
         >
           <Plus className="h-4 w-4" />
-          {t.agents.add}
+          {addLabel}
         </button>
       </div>
+
+      {/* Role tabs (admin only — supervisors stay on Agents) */}
+      {isAdmin && (
+        <div
+          role="tablist"
+          className="mb-4 inline-flex rounded-xl border border-border bg-surface p-1 text-sm"
+        >
+          <button
+            role="tab"
+            aria-selected={tab === "agent"}
+            onClick={() => setTab("agent")}
+            className={`rounded-lg px-4 py-2 font-semibold transition ${
+              tab === "agent" ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.agents.tabAgents}
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === "supervisor"}
+            onClick={() => setTab("supervisor")}
+            className={`rounded-lg px-4 py-2 font-semibold transition ${
+              tab === "supervisor" ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.agents.tabSupervisors}
+          </button>
+        </div>
+      )}
 
       {/* Desktop table */}
       <div className="hidden overflow-hidden rounded-2xl border border-border bg-card shadow-card md:block">
@@ -131,7 +173,7 @@ function AdminAgents() {
               <tr><td colSpan={6} className="px-5 py-12 text-center text-muted-foreground">…</td></tr>
             ) : agents.length === 0 ? (
               <tr><td colSpan={6} className="px-5 py-8">
-                <EmptyState icon={<Users className="h-7 w-7" />} title={t.agents.empty} />
+                <EmptyState icon={<Users className="h-7 w-7" />} title={emptyLabel} />
               </td></tr>
             ) : agents.map((a) => (
               <tr key={a.userId ?? a.id} className="border-t border-border hover:bg-muted/30">
@@ -175,7 +217,7 @@ function AdminAgents() {
       {/* Mobile cards */}
       <div className="space-y-3 md:hidden">
         {!loading && agents.length === 0 ? (
-          <EmptyState icon={<Users className="h-7 w-7" />} title={t.agents.empty} />
+          <EmptyState icon={<Users className="h-7 w-7" />} title={emptyLabel} />
         ) : agents.map((a) => (
           <div key={a.userId ?? a.id} className="rounded-2xl border border-border bg-card p-4 shadow-card">
             <div className="flex items-start justify-between">
@@ -217,6 +259,11 @@ function AdminAgents() {
         mode={dialog.mode}
         initial={dialog.target}
         lockedBranch={lockedBranch}
+        // Supervisors are forced to "agent". Admins:
+        //  - on create, the role selector starts on the active tab
+        //  - on edit, the existing role is locked (cannot be changed)
+        lockedRole={isSupervisor ? "agent" : (dialog.mode === "edit" ? dialog.target?.role : undefined)}
+        defaultRole={effectiveTab}
         onClose={() => setDialog({ open: false, mode: "create" })}
         onSubmit={dialog.mode === "create" ? onCreate : onEdit}
       />

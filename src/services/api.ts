@@ -341,6 +341,8 @@ export function resetDemo() {
 // Agents directory
 // ---------------------------------------------------------------------------
 
+export type AgentRole = "agent" | "supervisor";
+
 export type Agent = {
   userId?: string;
   id: string;
@@ -348,11 +350,14 @@ export type Agent = {
   email?: string;
   branch?: string;
   active: boolean;
+  /** Role of this directory entry. Defaults to "agent" for legacy records. */
+  role?: AgentRole;
 };
 
 const DEFAULT_AGENTS: Agent[] = [
-  { id: "A001", name: "Demo Agent", email: "agent@aib.com", branch: "Abu Dhabi", active: true },
-  { id: "A002", name: "Dubai Agent", branch: "Dubai", active: true },
+  { id: "A001", name: "Demo Agent", email: "agent@aib.com", branch: "Abu Dhabi", active: true, role: "agent" },
+  { id: "A002", name: "Dubai Agent", branch: "Dubai", active: true, role: "agent" },
+  { id: "S001", name: "Demo Supervisor", email: "supervisor@aib.com", branch: "Abu Dhabi", active: true, role: "supervisor" },
 ];
 
 function readAgents(): Agent[] {
@@ -370,11 +375,11 @@ export function listBranches(): string[] { return BRANCHES; }
 export async function getAgents(): Promise<Agent[]> { return readAgents(); }
 
 export async function createAgent(input: {
-  id: string; name: string; email?: string; branch?: string;
+  id: string; name: string; email?: string; branch?: string; role?: AgentRole;
 }): Promise<Agent> {
   const list = readAgents();
   if (list.some((a) => a.id === input.id)) throw new Error("Agent ID already exists");
-  const agent: Agent = { ...input, active: true };
+  const agent: Agent = { ...input, role: input.role ?? "agent", active: true };
   list.push(agent);
   writeJSON(AGENTS_KEY, list);
   notifyAgentsChange();

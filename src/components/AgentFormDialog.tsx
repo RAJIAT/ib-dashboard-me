@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Lock, Loader2, X } from "lucide-react";
 import { useLang } from "@/i18n/LanguageProvider";
-import { listBranches, type Agent } from "@/services/api";
+import { listBranches, type Agent, type AgentRole } from "@/services/api";
 
 export type AgentFormValues = {
   name: string;
@@ -9,10 +9,11 @@ export type AgentFormValues = {
   password: string;
   agentId: string;
   branch: string;
+  role: AgentRole;
 };
 
 export function AgentFormDialog({
-  open, mode, initial, onClose, onSubmit, lockedBranch,
+  open, mode, initial, onClose, onSubmit, lockedBranch, lockedRole, defaultRole,
 }: {
   open: boolean;
   mode: "create" | "edit";
@@ -20,10 +21,16 @@ export function AgentFormDialog({
   onClose: () => void;
   onSubmit: (values: AgentFormValues) => Promise<void>;
   lockedBranch?: string;
+  /** When set, hides the role selector and forces this role. */
+  lockedRole?: AgentRole;
+  /** Initial role for create mode (when lockedRole is not set). */
+  defaultRole?: AgentRole;
 }) {
   const { t, dir } = useLang();
   const [values, setValues] = useState<AgentFormValues>({
-    name: "", email: "", password: "", agentId: "", branch: listBranches()[0] ?? "",
+    name: "", email: "", password: "", agentId: "",
+    branch: listBranches()[0] ?? "",
+    role: lockedRole ?? defaultRole ?? "agent",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,8 +44,9 @@ export function AgentFormDialog({
       password: "",
       agentId: initial?.id ?? "",
       branch: lockedBranch ?? initial?.branch ?? (listBranches()[0] ?? ""),
+      role: lockedRole ?? initial?.role ?? defaultRole ?? "agent",
     });
-  }, [open, initial, lockedBranch]);
+  }, [open, initial, lockedBranch, lockedRole, defaultRole]);
 
   if (!open) return null;
 
@@ -64,12 +72,16 @@ export function AgentFormDialog({
     }
   };
 
+  const isSupervisorForm = (lockedRole ?? values.role) === "supervisor";
+  const titleCreate = isSupervisorForm ? t.agents.addSupervisorTitle : t.agents.addTitle;
+  const titleEdit = isSupervisorForm ? t.agents.editSupervisorTitle : t.agents.editTitle;
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-foreground/40 p-0 sm:items-center sm:p-4" dir={dir}>
       <div className="w-full max-w-lg overflow-hidden rounded-t-2xl bg-card shadow-elevated sm:rounded-2xl">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 className="text-base font-bold text-foreground">
-            {mode === "create" ? t.agents.addTitle : t.agents.editTitle}
+            {mode === "create" ? titleCreate : titleEdit}
           </h2>
           <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted">
             <X className="h-4 w-4" />
@@ -93,6 +105,19 @@ export function AgentFormDialog({
               className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground"
             />
           </Field>
+
+          {!lockedRole && mode === "create" && (
+            <Field label={t.agents.role}>
+              <select
+                value={values.role}
+                onChange={(e) => setValues((v) => ({ ...v, role: e.target.value as AgentRole }))}
+                className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground"
+              >
+                <option value="agent">{t.agents.roleAgent}</option>
+                <option value="supervisor">{t.agents.roleSupervisor}</option>
+              </select>
+            </Field>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t.agents.email}>

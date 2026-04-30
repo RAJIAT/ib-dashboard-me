@@ -10,7 +10,7 @@ import { useLang } from "@/i18n/LanguageProvider";
 import {
   canDeleteAgents,
   createAgent, deleteAgent, getAgents, getCurrentUser, refreshCurrentUser,
-  subscribeAgents, updateAgent, type Agent, type AuthUser,
+  subscribeAgents, updateAgent, type Agent, type AgentRole, type AuthUser,
 } from "@/services/api";
 
 export const Route = createFileRoute("/agents")({

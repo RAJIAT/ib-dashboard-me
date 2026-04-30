@@ -12,13 +12,14 @@ export type AgentFormValues = {
 };
 
 export function AgentFormDialog({
-  open, mode, initial, onClose, onSubmit,
+  open, mode, initial, onClose, onSubmit, lockedBranch,
 }: {
   open: boolean;
   mode: "create" | "edit";
   initial?: Agent;
   onClose: () => void;
   onSubmit: (values: AgentFormValues) => Promise<void>;
+  lockedBranch?: string;
 }) {
   const { t, dir } = useLang();
   const [values, setValues] = useState<AgentFormValues>({
@@ -35,9 +36,9 @@ export function AgentFormDialog({
       email: initial?.email ?? "",
       password: "",
       agentId: initial?.id ?? "",
-      branch: initial?.branch ?? (listBranches()[0] ?? ""),
+      branch: lockedBranch ?? initial?.branch ?? (listBranches()[0] ?? ""),
     });
-  }, [open, initial]);
+  }, [open, initial, lockedBranch]);
 
   if (!open) return null;
 
@@ -110,7 +111,8 @@ export function AgentFormDialog({
               <select
                 value={values.branch}
                 onChange={(e) => setValues((v) => ({ ...v, branch: e.target.value }))}
-                className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground"
+                disabled={!!lockedBranch}
+                className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground disabled:opacity-60"
               >
                 {listBranches().map((b) => <option key={b} value={b}>{b}</option>)}
               </select>

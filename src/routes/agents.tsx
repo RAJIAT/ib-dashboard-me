@@ -8,8 +8,9 @@ import { AgentFormDialog, type AgentFormValues } from "@/components/AgentFormDia
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useLang } from "@/i18n/LanguageProvider";
 import {
+  canDeleteAgents,
   createAgent, deleteAgent, getAgents, getCurrentUser, refreshCurrentUser,
-  subscribeAgents, updateAgent, type Agent,
+  subscribeAgents, updateAgent, type Agent, type AuthUser,
 } from "@/services/api";
 
 export const Route = createFileRoute("/agents")({
@@ -19,6 +20,7 @@ export const Route = createFileRoute("/agents")({
 function AdminAgents() {
   const { t, dir } = useLang();
   const navigate = useNavigate();
+  const [user, setUser] = useState<AuthUser | null>(() => getCurrentUser());
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState<{ open: boolean; mode: "create" | "edit"; target?: Agent }>({
@@ -27,17 +29,29 @@ function AdminAgents() {
   const [confirmTarget, setConfirmTarget] = useState<Agent | null>(null);
   const Back = dir === "rtl" ? ArrowRight : ArrowLeft;
 
+  const isSupervisor = user?.role === "supervisor";
+  const lockedBranch = isSupervisor ? user?.branch : undefined;
+  const canDelete = canDeleteAgents(user);
+
   useEffect(() => {
     const u = getCurrentUser();
-    if (!u || u.role !== "admin") { navigate({ to: "/login" }); return; }
+    if (!u || (u.role !== "admin" && u.role !== "supervisor")) { navigate({ to: "/login" }); return; }
+    setUser(u);
     let alive = true;
     const refresh = () => {
-      getAgents().then((list) => { if (alive) { setAgents(list); setLoading(false); } });
+      getAgents().then((list) => {
+        if (!alive) return;
+        const filtered = u.role === "supervisor" && u.branch
+          ? list.filter((a) => a.branch === u.branch)
+          : list;
+        setAgents(filtered);
+        setLoading(false);
+      });
     };
-    // Re-verify role server-side; redirect if tampered.
     refreshCurrentUser().then((fresh) => {
       if (!alive) return;
-      if (!fresh || fresh.role !== "admin") { navigate({ to: "/login" }); return; }
+      if (!fresh || (fresh.role !== "admin" && fresh.role !== "supervisor")) { navigate({ to: "/login" }); return; }
+      setUser(fresh);
       refresh();
     });
     const off = subscribeAgents(refresh);
@@ -46,7 +60,8 @@ function AdminAgents() {
 
   const onCreate = async (v: AgentFormValues) => {
     await createAgent({
-      id: v.agentId, name: v.name, email: v.email, branch: v.branch,
+      id: v.agentId, name: v.name, email: v.email,
+      branch: lockedBranch ?? v.branch,
     });
     toast.success(t.agents.created);
   };
@@ -54,7 +69,9 @@ function AdminAgents() {
   const onEdit = async (v: AgentFormValues) => {
     if (!dialog.target) return;
     await updateAgent(dialog.target.id, {
-      name: v.name, branch: v.branch, email: v.email,
+      name: v.name,
+      branch: lockedBranch ?? v.branch,
+      email: v.email,
     });
     toast.success(t.agents.updated);
   };
@@ -133,9 +150,11 @@ function AdminAgents() {
                     <IconBtn label={a.active ? t.agents.suspend : t.agents.activate} onClick={() => onToggle(a)}>
                       <Power className="h-4 w-4" />
                     </IconBtn>
-                    <IconBtn danger label={t.agents.delete} onClick={() => onDelete(a)}>
-                      <Trash2 className="h-4 w-4" />
-                    </IconBtn>
+                    {canDelete && (
+                      <IconBtn danger label={t.agents.delete} onClick={() => onDelete(a)}>
+                        <Trash2 className="h-4 w-4" />
+                      </IconBtn>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -165,9 +184,11 @@ function AdminAgents() {
               <IconBtn label={a.active ? t.agents.suspend : t.agents.activate} onClick={() => onToggle(a)}>
                 <Power className="h-4 w-4" />
               </IconBtn>
-              <IconBtn danger label={t.agents.delete} onClick={() => onDelete(a)}>
-                <Trash2 className="h-4 w-4" />
-              </IconBtn>
+              {canDelete && (
+                <IconBtn danger label={t.agents.delete} onClick={() => onDelete(a)}>
+                  <Trash2 className="h-4 w-4" />
+                </IconBtn>
+              )}
             </div>
           </div>
         ))}
@@ -177,6 +198,7 @@ function AdminAgents() {
         open={dialog.open}
         mode={dialog.mode}
         initial={dialog.target}
+        lockedBranch={lockedBranch}
         onClose={() => setDialog({ open: false, mode: "create" })}
         onSubmit={dialog.mode === "create" ? onCreate : onEdit}
       />

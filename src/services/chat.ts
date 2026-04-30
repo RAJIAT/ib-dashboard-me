@@ -172,8 +172,28 @@ export function listThreadsForUser(user: AuthUser): ChatThread[] {
         false,
     );
   }
-  // agent — single thread keyed by agentId
-  if (user.agentId) return all.filter((t) => t.agentId === user.agentId);
+  // agent — single thread keyed by agentId. If none exists yet (agent not in
+  // directory, or no supervisor at all), create an ad-hoc thread targeting Admin
+  // so the agent can always start a conversation.
+  if (user.agentId) {
+    const mine = all.filter((t) => t.agentId === user.agentId);
+    if (mine.length > 0) return mine;
+    const supervisors = listAgents().filter((a) => a.role === "supervisor");
+    const sup = supervisors.find((s) => s.active) ?? supervisors[0];
+    const fallback: ChatThread = {
+      id: user.agentId,
+      agentId: user.agentId,
+      agentName: user.name,
+      supervisorId: sup?.userId ?? (sup ? `agent:${sup.id}` : "admin"),
+      supervisorName: sup?.name ?? "Admin",
+      branch: user.branch,
+      lastMessageAt: undefined,
+      lastMessagePreview: undefined,
+    };
+    const next = [...readThreads(), fallback];
+    writeThreads(next);
+    return [fallback];
+  }
   return [];
 }
 

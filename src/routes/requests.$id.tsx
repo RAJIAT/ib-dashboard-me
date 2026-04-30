@@ -17,7 +17,7 @@ export const Route = createFileRoute("/requests/$id")({
   component: RequestDetails,
 });
 
-type SavingAction = "quote" | "sold" | "reupload" | "select" | null;
+type SavingAction = "quote" | "sold" | "reupload" | "linkSent" | "select" | null;
 
 function dataUrlToBlob(dataUrl: string): Blob {
   const [meta, b64] = dataUrl.split(",");

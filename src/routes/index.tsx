@@ -49,10 +49,9 @@ function UploadPage() {
   const registrationOk = registration.length >= 2;
   const emiratesOk = emirates.length >= 2;
   const licenseOk = license.length >= 2;
-  const vehicleOk = vehicleMedia.length >= 2; // at least 2 media (front + back)
-  const completed = [registrationOk, emiratesOk, licenseOk, vehicleOk].filter(Boolean).length;
-  const docsReady = completed === 4;
-  const remaining = 4 - completed;
+  const completed = [registrationOk, emiratesOk, licenseOk].filter(Boolean).length;
+  const docsReady = completed === 3;
+  const remaining = 3 - completed;
 
   const kycSchema = useMemo(
     () =>

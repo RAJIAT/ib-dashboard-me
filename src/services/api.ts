@@ -6,7 +6,33 @@
  * any server.
  */
 
-export type RequestStatus = "new" | "processing" | "sold" | "rejected" | "reupload";
+export type RequestStatus =
+  | "new"
+  | "linkSent"
+  | "processing"
+  | "sold"
+  | "rejected"
+  | "reupload";
+
+export type RequestNoteKind = "comment" | "missing";
+
+export type RequestNote = {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorRole: "admin" | "supervisor" | "agent";
+  text: string;
+  kind: RequestNoteKind;
+  createdAt: string;
+  resolvedAt?: string;
+};
+
+export type AttachmentMeta = {
+  name: string;
+  type: string;
+  size: number;
+  url: string;
+};
 
 export type InsuranceRequest = {
   id: string;
@@ -19,6 +45,7 @@ export type InsuranceRequest = {
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
+  notes: RequestNote[];
   images: {
     /** Vehicle registration card images (front + back, in that order). */
     registration: string[];
@@ -32,6 +59,8 @@ export type InsuranceRequest = {
       | { kind: "video"; name: string; size: number; type: string }
     >;
     inspection?: string;
+    /** Free-form attachments (images, PDF, docs — no video). */
+    attachments: AttachmentMeta[];
   };
 };
 

@@ -114,7 +114,12 @@ function readJSON<T>(key: string, fallback: T): T {
 
 function writeJSON(key: string, value: unknown) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    console.error("[storage] writeJSON failed for key", key, err);
+    throw new Error("STORAGE_QUOTA_EXCEEDED");
+  }
 }
 
 function notifyChange() {

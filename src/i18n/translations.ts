@@ -380,6 +380,7 @@ export const translations = {
       deleted: "Agent deleted",
       empty: "No agents yet. Add your first agent to get started.",
       backToAdmin: "Admin Dashboard",
+      supervisorNoDelete: "You don't have permission to delete agents. Only admins can do that.",
     },
     hero: {
       trust: "Your data is encrypted and handled with full confidentiality",

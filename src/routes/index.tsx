@@ -36,7 +36,8 @@ function UploadPage() {
 
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
-  const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [errors, setErrors] = useState<{ name?: string; email?: string; phone?: string }>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -68,20 +69,27 @@ function UploadPage() {
           .min(1, t.upload.errors.emailRequired)
           .email(t.upload.errors.emailInvalid)
           .max(255),
+        customerPhone: z
+          .string()
+          .trim()
+          .min(1, t.upload.errors.phoneRequired)
+          .max(20)
+          .regex(/^\+?[0-9\s-]{7,20}$/, t.upload.errors.phoneInvalid),
       }),
     [t],
   );
 
-  const kycValid = kycSchema.safeParse({ customerName, customerEmail }).success;
+  const kycValid = kycSchema.safeParse({ customerName, customerEmail, customerPhone }).success;
   const ready = docsReady && kycValid;
 
   const onSubmit = async () => {
-    const parsed = kycSchema.safeParse({ customerName, customerEmail });
+    const parsed = kycSchema.safeParse({ customerName, customerEmail, customerPhone });
     if (!parsed.success) {
-      const fieldErrors: { name?: string; email?: string } = {};
+      const fieldErrors: { name?: string; email?: string; phone?: string } = {};
       for (const issue of parsed.error.issues) {
         if (issue.path[0] === "customerName") fieldErrors.name = issue.message;
         if (issue.path[0] === "customerEmail") fieldErrors.email = issue.message;
+        if (issue.path[0] === "customerPhone") fieldErrors.phone = issue.message;
       }
       setErrors(fieldErrors);
       scrollToKyc();
@@ -95,6 +103,7 @@ function UploadPage() {
         agentId: agent ?? "A123",
         customerName: parsed.data.customerName,
         customerEmail: parsed.data.customerEmail,
+        customerPhone: parsed.data.customerPhone,
         images: {
           registration,
           license,

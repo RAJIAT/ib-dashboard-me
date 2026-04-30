@@ -115,32 +115,59 @@ function RequestDetails() {
     return list;
   }, [req]);
 
+  const buildZipBlob = async (): Promise<Blob | null> => {
+    if (!req) return null;
+    const zip = new JSZip();
+    for (const a of allAssets) {
+      const { url, mime } = await resolveAssetUrl(a.url);
+      if (!url) continue;
+      let blob: Blob;
+      if (url.startsWith("data:")) {
+        blob = dataUrlToBlob(url);
+      } else if (url.startsWith("blob:") || url.startsWith("http")) {
+        blob = await (await fetch(url)).blob();
+      } else {
+        continue;
+      }
+      const ext = extFromMime(mime || blob.type);
+      zip.file(`${a.baseName}.${ext}`, blob);
+    }
+    return await zip.generateAsync({ type: "blob" });
+  };
+
   const downloadAllZip = async () => {
     if (!req || zipping) return;
     setZipping(true);
     try {
-      const zip = new JSZip();
-      for (const a of allAssets) {
-        const { url, mime } = await resolveAssetUrl(a.url);
-        if (!url) continue;
-        let blob: Blob;
-        if (url.startsWith("data:")) {
-          blob = dataUrlToBlob(url);
-        } else if (url.startsWith("blob:") || url.startsWith("http")) {
-          blob = await (await fetch(url)).blob();
-        } else {
-          continue;
-        }
-        const ext = extFromMime(mime || blob.type);
-        zip.file(`${a.baseName}.${ext}`, blob);
-      }
-      const out = await zip.generateAsync({ type: "blob" });
+      const out = await buildZipBlob();
+      if (!out) return;
       triggerDownload(out, `${req.id}.zip`);
       toast.success(t.details.downloadStarted);
     } catch {
       toast.error(t.details.downloadFailed);
     } finally {
       setZipping(false);
+    }
+  };
+
+  const [sharing, setSharing] = useState(false);
+  const shareByEmail = async () => {
+    if (!req || sharing) return;
+    setSharing(true);
+    try {
+      const out = await buildZipBlob();
+      if (!out) return;
+      triggerDownload(out, `${req.id}.zip`);
+      toast.success(t.details.shareEmailHint);
+      const subject = `${t.details.shareEmailSubject} — ${req.id}`;
+      const body = `${t.details.shareEmailBody}\n\n${t.table.agent}: ${req.agentName}\n${t.table.branch}: ${req.branch}\n${t.details.title}: ${req.id}`;
+      const to = req.customerEmail ?? "";
+      const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = mailto;
+    } catch {
+      toast.error(t.details.downloadFailed);
+    } finally {
+      setSharing(false);
     }
   };
 

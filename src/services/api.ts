@@ -564,7 +564,7 @@ export async function appendAttachmentsToRequest(
     notes,
     images: {
       ...cur.images,
-      attachments: [...(cur.images.attachments ?? []), ...newAttachments],
+      missingAttachments: [...(cur.images.missingAttachments ?? []), ...newAttachments],
     },
   };
   writeRequests(all);

@@ -251,7 +251,9 @@ function readRequests(): InsuranceRequest[] {
       registration?: string | string[];
       registrationFront?: string;
       registrationBack?: string;
-      license?: string;
+      license?: string | string[];
+      licenseFront?: string;
+      licenseBack?: string;
       emirates?: string | string[];
       emiratesFront?: string;
       emiratesBack?: string;
@@ -282,11 +284,18 @@ function readRequests(): InsuranceRequest[] {
       (img.vehiclePhotos ?? []).forEach((url) => vehicleMedia!.push({ kind: "image", url }));
       if (img.vehicleVideo) vehicleMedia.push({ kind: "video", ...img.vehicleVideo });
     }
+    // License → string[]
+    let license: string[];
+    if (Array.isArray(img.license)) license = img.license.filter(Boolean);
+    else {
+      license = [img.licenseFront, img.licenseBack, typeof img.license === "string" ? img.license : undefined]
+        .filter((x): x is string => !!x);
+    }
     return {
       ...r,
       images: {
         registration,
-        license: img.license ?? "",
+        license,
         emirates,
         vehicleMedia,
         inspection: img.inspection,

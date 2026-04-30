@@ -49,10 +49,9 @@ function UploadPage() {
   const registrationOk = registration.length >= 2;
   const emiratesOk = emirates.length >= 2;
   const licenseOk = license.length >= 2;
-  const vehicleOk = vehicleMedia.length >= 2; // at least 2 media (front + back)
-  const completed = [registrationOk, emiratesOk, licenseOk, vehicleOk].filter(Boolean).length;
-  const docsReady = completed === 4;
-  const remaining = 4 - completed;
+  const completed = [registrationOk, emiratesOk, licenseOk].filter(Boolean).length;
+  const docsReady = completed === 3;
+  const remaining = 3 - completed;
 
   const kycSchema = useMemo(
     () =>
@@ -72,9 +71,10 @@ function UploadPage() {
         customerPhone: z
           .string()
           .trim()
-          .min(1, t.upload.errors.phoneRequired)
           .max(20)
-          .regex(/^\+?[0-9\s-]{7,20}$/, t.upload.errors.phoneInvalid),
+          .regex(/^\+?[0-9\s-]{0,20}$/, t.upload.errors.phoneInvalid)
+          .optional()
+          .or(z.literal("")),
       }),
     [t],
   );
@@ -228,7 +228,7 @@ function UploadPage() {
             </div>
             <div>
               <label htmlFor="customerPhone" className="mb-1.5 block text-xs font-semibold text-foreground">
-                {t.upload.kyc.phoneLabel} <span className="text-destructive">*</span>
+                {t.upload.kyc.phoneLabel}
               </label>
               <input
                 id="customerPhone"
@@ -275,15 +275,6 @@ function UploadPage() {
             min={2}
             max={2}
           />
-          <MultiUploadCard
-            label={t.upload.cards.vehiclePhotos}
-            hint={t.upload.vehiclePhotosHint}
-            files={vehicleMedia}
-            onChange={setVehicleMedia}
-            min={2}
-            max={8}
-            allowVideo
-          />
         </section>
 
         <p className="mt-5 text-center text-sm font-medium text-muted-foreground">
@@ -292,6 +283,16 @@ function UploadPage() {
 
         {/* Optional uploads */}
         <section className="mt-6 grid gap-4 sm:grid-cols-2" dir={dir}>
+          <MultiUploadCard
+            label={t.upload.cards.vehiclePhotos}
+            hint={t.upload.vehiclePhotosHint}
+            files={vehicleMedia}
+            onChange={setVehicleMedia}
+            min={0}
+            max={8}
+            allowVideo
+            optional
+          />
           <UploadCard
             label={t.upload.cards.inspection}
             file={inspection}

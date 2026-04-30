@@ -198,6 +198,7 @@ function AdminAgents() {
         open={dialog.open}
         mode={dialog.mode}
         initial={dialog.target}
+        lockedBranch={lockedBranch}
         onClose={() => setDialog({ open: false, mode: "create" })}
         onSubmit={dialog.mode === "create" ? onCreate : onEdit}
       />

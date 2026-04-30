@@ -267,9 +267,23 @@ export async function updateRequestStatus(id: string, status: RequestStatus): Pr
   const all = readRequests();
   const idx = all.findIndex((r) => r.id === id || r.uuid === id);
   if (idx === -1) throw new Error("Request not found");
-  all[idx] = { ...all[idx], status };
+  const before = all[idx];
+  all[idx] = { ...before, status };
   writeRequests(all);
   notifyChange();
+  if (before.status !== status) {
+    import("./audit").then(({ logEvent }) =>
+      logEvent({
+        action: "request.status_changed",
+        entityType: "request",
+        entityId: before.id,
+        entityLabel: before.id,
+        branch: before.branch ?? null,
+        before: { status: before.status },
+        after: { status },
+      }),
+    );
+  }
   return all[idx];
 }
 

@@ -20,6 +20,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RequestsIdRouteImport } from './routes/requests.$id'
 import { Route as RRequestIdRouteImport } from './routes/r.$requestId'
+import { Route as ApiAdminSetupRouteImport } from './routes/api/admin-setup'
 import { Route as ApiDirectusSplatRouteImport } from './routes/api/directus.$'
 
 const SuccessRoute = SuccessRouteImport.update({
@@ -77,6 +78,11 @@ const RRequestIdRoute = RRequestIdRouteImport.update({
   path: '/r/$requestId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminSetupRoute = ApiAdminSetupRouteImport.update({
+  id: '/api/admin-setup',
+  path: '/api/admin-setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDirectusSplatRoute = ApiDirectusSplatRouteImport.update({
   id: '/api/directus/$',
   path: '/api/directus/$',
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/setup-directus': typeof SetupDirectusRoute
   '/success': typeof SuccessRoute
+  '/api/admin-setup': typeof ApiAdminSetupRoute
   '/r/$requestId': typeof RRequestIdRoute
   '/requests/$id': typeof RequestsIdRoute
   '/api/directus/$': typeof ApiDirectusSplatRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/setup-directus': typeof SetupDirectusRoute
   '/success': typeof SuccessRoute
+  '/api/admin-setup': typeof ApiAdminSetupRoute
   '/r/$requestId': typeof RRequestIdRoute
   '/requests/$id': typeof RequestsIdRoute
   '/api/directus/$': typeof ApiDirectusSplatRoute
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/setup-directus': typeof SetupDirectusRoute
   '/success': typeof SuccessRoute
+  '/api/admin-setup': typeof ApiAdminSetupRoute
   '/r/$requestId': typeof RRequestIdRoute
   '/requests/$id': typeof RequestsIdRoute
   '/api/directus/$': typeof ApiDirectusSplatRoute
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/setup-directus'
     | '/success'
+    | '/api/admin-setup'
     | '/r/$requestId'
     | '/requests/$id'
     | '/api/directus/$'
@@ -152,6 +162,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/setup-directus'
     | '/success'
+    | '/api/admin-setup'
     | '/r/$requestId'
     | '/requests/$id'
     | '/api/directus/$'
@@ -166,6 +177,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/setup-directus'
     | '/success'
+    | '/api/admin-setup'
     | '/r/$requestId'
     | '/requests/$id'
     | '/api/directus/$'
@@ -181,6 +193,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SetupDirectusRoute: typeof SetupDirectusRoute
   SuccessRoute: typeof SuccessRoute
+  ApiAdminSetupRoute: typeof ApiAdminSetupRoute
   RRequestIdRoute: typeof RRequestIdRoute
   RequestsIdRoute: typeof RequestsIdRoute
   ApiDirectusSplatRoute: typeof ApiDirectusSplatRoute
@@ -265,6 +278,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RRequestIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin-setup': {
+      id: '/api/admin-setup'
+      path: '/api/admin-setup'
+      fullPath: '/api/admin-setup'
+      preLoaderRoute: typeof ApiAdminSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/directus/$': {
       id: '/api/directus/$'
       path: '/api/directus/$'
@@ -285,6 +305,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SetupDirectusRoute: SetupDirectusRoute,
   SuccessRoute: SuccessRoute,
+  ApiAdminSetupRoute: ApiAdminSetupRoute,
   RRequestIdRoute: RRequestIdRoute,
   RequestsIdRoute: RequestsIdRoute,
   ApiDirectusSplatRoute: ApiDirectusSplatRoute,

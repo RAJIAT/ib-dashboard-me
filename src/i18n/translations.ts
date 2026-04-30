@@ -154,6 +154,7 @@ export const translations = {
     },
     admin: {
       title: "لوحة المدير",
+      supervisorTitle: "لوحة المشرف",
       total: "عدد الطلبات",
       newReq: "الطلبات الجديدة",
       sales: "المبيعات",
@@ -407,6 +408,7 @@ export const translations = {
     },
     admin: {
       title: "Admin Dashboard",
+      supervisorTitle: "Supervisor Dashboard",
       total: "Total Requests",
       newReq: "New Requests",
       sales: "Sales",

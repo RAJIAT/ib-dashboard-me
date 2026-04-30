@@ -7,7 +7,6 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo } from "@/components/Logo";
 import { UploadCard } from "@/components/UploadCard";
 import { MultiUploadCard } from "@/components/MultiUploadCard";
-import { VideoUploadCard } from "@/components/VideoUploadCard";
 import { useLang } from "@/i18n/LanguageProvider";
 import { submitUpload } from "@/services/api";
 
@@ -25,14 +24,16 @@ function UploadPage() {
   const navigate = useNavigate();
   const { agent } = useSearch({ from: "/" });
 
-  const [registrationFront, setRegistrationFront] = useState<File | null>(null);
-  const [registrationBack, setRegistrationBack] = useState<File | null>(null);
+  // Two-image cards (front + back) — single picker each.
+  const [registration, setRegistration] = useState<File[]>([]);
+  const [emirates, setEmirates] = useState<File[]>([]);
+  // Single license card.
   const [license, setLicense] = useState<File | null>(null);
-  const [emiratesFront, setEmiratesFront] = useState<File | null>(null);
-  const [emiratesBack, setEmiratesBack] = useState<File | null>(null);
+  // Combined photos + videos card.
+  const [vehicleMedia, setVehicleMedia] = useState<File[]>([]);
+  // Optional.
   const [inspection, setInspection] = useState<File | null>(null);
-  const [vehiclePhotos, setVehiclePhotos] = useState<File[]>([]);
-  const [vehicleVideo, setVehicleVideo] = useState<File | null>(null);
+
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
@@ -44,26 +45,13 @@ function UploadPage() {
     kycRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const requiredCards: Array<{ key: string; label: string; file: File | null; set: (f: File | null) => void }> = useMemo(
-    () => [
-      { key: "registrationFront", label: t.upload.cards.registrationFront, file: registrationFront, set: setRegistrationFront },
-      { key: "registrationBack", label: t.upload.cards.registrationBack, file: registrationBack, set: setRegistrationBack },
-      { key: "license", label: t.upload.cards.license, file: license, set: setLicense },
-      { key: "emiratesFront", label: t.upload.cards.emiratesFront, file: emiratesFront, set: setEmiratesFront },
-      { key: "emiratesBack", label: t.upload.cards.emiratesBack, file: emiratesBack, set: setEmiratesBack },
-    ],
-    [t, registrationFront, registrationBack, license, emiratesFront, emiratesBack],
-  );
-
-  const minVehiclePhotos = 2;
-  const requiredFiles = [registrationFront, registrationBack, license, emiratesFront, emiratesBack];
-  const uploadedDocs = requiredFiles.filter(Boolean).length;
-  const photosOk = vehiclePhotos.length >= minVehiclePhotos;
-  const videoOk = !!vehicleVideo;
-  const allRequiredCount = requiredFiles.length + 1 /* video */ + 1 /* photos group */;
-  const completedCount = uploadedDocs + (videoOk ? 1 : 0) + (photosOk ? 1 : 0);
-  const docsReady = completedCount === allRequiredCount;
-  const remaining = allRequiredCount - completedCount;
+  const registrationOk = registration.length >= 2;
+  const emiratesOk = emirates.length >= 2;
+  const licenseOk = !!license;
+  const vehicleOk = vehicleMedia.length >= 2; // at least 2 media (front + back)
+  const completed = [registrationOk, emiratesOk, licenseOk, vehicleOk].filter(Boolean).length;
+  const docsReady = completed === 4;
+  const remaining = 4 - completed;
 
   const kycSchema = useMemo(
     () =>
@@ -100,11 +88,7 @@ function UploadPage() {
       return;
     }
     setErrors({});
-    if (!photosOk) {
-      toast.error(t.upload.errors.minVehiclePhotos);
-      return;
-    }
-    if (!registrationFront || !registrationBack || !license || !emiratesFront || !emiratesBack || !vehicleVideo) return;
+    if (!docsReady || !license) return;
     setSubmitting(true);
     try {
       const { id } = await submitUpload({
@@ -112,14 +96,12 @@ function UploadPage() {
         customerName: parsed.data.customerName,
         customerEmail: parsed.data.customerEmail,
         images: {
-          registrationFront,
-          registrationBack,
+          registration,
           license,
-          emiratesFront,
-          emiratesBack,
-          vehiclePhotos,
+          emirates,
+          vehicleMedia,
         },
-        optional: { inspection, vehicleVideo },
+        optional: { inspection },
       });
       setDone(true);
       setTimeout(() => navigate({ to: "/success", search: { id } }), 600);
@@ -238,29 +220,39 @@ function UploadPage() {
           </div>
         </section>
 
-        {/* Required documents */}
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" dir={dir}>
-          {requiredCards.map((c) => (
-            <UploadCard key={c.key} label={c.label} file={c.file} onChange={c.set} />
-          ))}
-        </section>
-
-        {/* Required vehicle media */}
-        <section className="mt-6 grid gap-4 sm:grid-cols-2" dir={dir}>
+        {/* Required documents — 3 cards */}
+        <section className="mt-6 grid gap-4 md:grid-cols-2" dir={dir}>
+          <MultiUploadCard
+            label={t.upload.cards.registration}
+            hint={t.upload.registrationHint}
+            files={registration}
+            onChange={setRegistration}
+            min={2}
+            max={2}
+          />
+          <MultiUploadCard
+            label={t.upload.cards.emirates}
+            hint={t.upload.emiratesHint}
+            files={emirates}
+            onChange={setEmirates}
+            min={2}
+            max={2}
+          />
+          <UploadCard
+            label={t.upload.cards.license}
+            file={license}
+            onChange={setLicense}
+          />
           <MultiUploadCard
             label={t.upload.cards.vehiclePhotos}
-            files={vehiclePhotos}
-            onChange={setVehiclePhotos}
-          />
-          <VideoUploadCard
-            label={t.upload.cards.vehicleVideo}
-            file={vehicleVideo}
-            onChange={setVehicleVideo}
+            hint={t.upload.vehiclePhotosHint}
+            files={vehicleMedia}
+            onChange={setVehicleMedia}
+            min={2}
+            max={8}
+            allowVideo
           />
         </section>
-        <p className="mt-2 text-center text-xs text-muted-foreground" dir={dir}>
-          {t.upload.vehiclePhotosHint}
-        </p>
 
         <p className="mt-5 text-center text-sm font-medium text-muted-foreground">
           {docsReady ? t.upload.allDone : t.upload.remaining(remaining)}

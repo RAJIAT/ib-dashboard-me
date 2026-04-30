@@ -66,7 +66,7 @@ export function DashboardShell({
     navigate({ to: "/login" });
   };
 
-  if (!user) return null;
+  if (!mounted || !user) return <div className="min-h-screen bg-background" />;
 
   const sideBorder = dir === "rtl" ? "border-l" : "border-r";
   // Suppress unused warning — kept for potential per-shell admin gating

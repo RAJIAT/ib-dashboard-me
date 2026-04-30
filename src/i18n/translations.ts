@@ -115,7 +115,7 @@ export const translations = {
       processing: "قيد المعالجة",
       sold: "مباع",
       rejected: "مرفوض",
-      reupload: "إعادة رفع",
+      reupload: "بانتظار إكمال النواقص",
     },
     details: {
       back: "رجوع",
@@ -427,7 +427,7 @@ export const translations = {
       processing: "Processing",
       sold: "Sold",
       rejected: "Rejected",
-      reupload: "Reupload",
+      reupload: "Awaiting missing docs",
     },
     details: {
       back: "Back",

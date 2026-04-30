@@ -1,101 +1,96 @@
-# لايف شات بين الايجنت والسوبرفايزر
+## خطة الإطلاق الكاملة (بدون دومين/SSL)
 
-شات مباشر (1-on-1) بين كل **ايجنت** والسوبرفايزر المسؤول عنه، مدعوم بقاعدة البيانات + Realtime، مع إشعارات، إرفاق ملفات، ومؤشرات typing/read.
+الهدف: الموقع جاهز 100% على Directus، كل البيانات على السيرفر تبعك (74.162.122.193:8055)، بدون أي اعتماد على localStorage أو بيانات ديمو. الدومين + SSL آخر مرحلة منفصلة.
 
-## نموذج العلاقة
+---
 
-كل ايجنت = محادثة واحدة مع السوبرفايزر تبعه. السوبرفايزر يشوف قائمة كل الايجنتس تحته، الايجنت يشوف محادثة واحدة فقط (مع سوبرفايزره). الادمن يقدر يشوف كل المحادثات (للمراقبة).
+### المرحلة 1 — تجهيز Directus (أنا أعمله بالـ token)
 
-```text
-Agent A ──┐
-Agent B ──┼──► Supervisor X
-Agent C ──┘
-Agent D ─────► Supervisor Y
-```
+أستخدم الـ Admin token اللي أعطيتني عشان أعمل عبر Directus REST API:
 
-## التغييرات على قاعدة البيانات
+**أ) إنشاء Collection `branches`**
+- name (string, required)
+- code (string, required, unique)
+- address (text)
+- phone (string)
+- is_active (boolean, default true)
 
-### 1. إضافة دور supervisor + ربط الايجنت بسوبرفايزر
-- إضافة `'supervisor'` لـ `app_role` enum.
-- إضافة عمود `supervisor_user_id uuid` على جدول `agents` (يشير لـ `auth.users.id` للسوبرفايزر).
+**ب) ربط `directus_users` بـ `branches`**
+- إضافة حقل `branch_id` (M2O → branches) للـ users
+- (الحقل القديم `branch` كـ string يبقى للـ backward compatibility)
 
-### 2. جدول `chat_threads`
-- `id uuid pk`, `agent_id text` (FK→agents), `supervisor_user_id uuid`, `agent_user_id uuid`, `last_message_at timestamptz`, `created_at`.
-- Unique على `agent_id` (محادثة واحدة لكل ايجنت).
+**ج) تنظيف Collections غير المستخدمة**
+- مراجعة `request_missing_attachments`, `request_vehicle_media`, `requests_files` ودمجها/حذفها لو في تكرار
+- التأكد من حقول `requests` كاملة (status, branch, agent_id, customer_*, الصور)
 
-### 3. جدول `chat_messages`
-- `id uuid pk`, `thread_id uuid`, `sender_user_id uuid`, `sender_role app_role`, `body text`, `attachment_url text`, `attachment_name text`, `attachment_mime text`, `created_at`.
+**د) ضبط Permissions**
+- **Administrator**: full access (تلقائي)
+- **Supervisor**: قراءة/تعديل الطلبات في فرعه فقط، إدارة Agents في فرعه
+- **Agent**: إنشاء/تعديل طلباته فقط (assigned_to = $CURRENT_USER)
 
-### 4. جدول `chat_reads`
-- `thread_id uuid`, `user_id uuid`, `last_read_at timestamptz`, PK مركّب. لحساب عدد الرسائل غير المقروءة.
+**هـ) إضافة فروع تجريبية**
+- 3-5 فروع مبدئية حتى تقدر تجرب فوراً
 
-### 5. جدول `chat_typing` (اختياري خفيف، يكفينا Realtime broadcast بدون جدول)
-سنستخدم Supabase **Realtime Presence/Broadcast** لحالة typing بدون تخزين.
+---
 
-### RLS
-- `chat_threads`: SELECT للسوبرفايزر/الايجنت المعنيين + admin.
-- `chat_messages`: SELECT/INSERT لأطراف الـ thread فقط + admin يقرأ الكل.
-- `chat_reads`: كل user يحدّث صفه فقط.
-- تفعيل Realtime على `chat_messages` و `chat_threads`.
+### المرحلة 2 — تحويل الكود بالكامل لـ Directus
 
-### Storage
-- استخدام bucket `request-docs` نفسه أو إنشاء bucket جديد `chat-attachments` (private) مع policies لأطراف المحادثة.
+**أ) Requests (الطلبات)**
+- استبدال كل `readRequests/writeRequests` (localStorage) بـ `dxListRequests/dxCreateRequest/dxUpdateRequest`
+- رفع الصور عبر `dxUploadFile` بدل data URLs
+- استرجاع الصور عبر `dxFetchAsset` بـ token
+- حذف `REQUESTS_KEY`, `SEQ_KEY`, `AGENTS_KEY` نهائياً من api.ts
 
-## التغييرات في الواجهة
+**ب) Notes & Attachments**
+- ربط `request_notes` collection بشاشة الطلب
+- ربط `request_attachments` collection
+- ربط `request_missing_attachments` لرفع المستندات الناقصة من العميل
 
-### مكوّن `<ChatWidget />` (يظهر بكل صفحات Dashboard)
-- زر عائم أسفل يمين فيه badge بعدد الرسائل غير المقروءة (مجموع كل الـ threads).
-- بالضغط يفتح Drawer/Sheet:
-  - **للسوبرفايزر**: قائمة الايجنتس (مع badge لكل واحد + آخر رسالة + الوقت)، الضغط يفتح المحادثة.
-  - **للايجنت**: يفتح مباشرة على المحادثة الوحيدة مع سوبرفايزره.
-  - **للادمن**: قائمة كل الـ threads (read-only أو participate).
+**ج) Audit Log**
+- كل عملية حساسة (create/update/delete request, إنشاء agent, تغيير حالة) تُسجَّل في `audit_log`
+- شاشة `/audit` تقرأ من Directus
 
-### مكوّن `<ChatThread />`
-- Header: اسم الطرف الآخر + حالة online (presence).
-- Body: رسائل بترتيب زمني، فقاعات (مرسل يمين / مستقبِل يسار)، الوقت، اسم المرسل، حالة قراءة (✓ / ✓✓).
-- مؤشر "يكتب الآن…" تحت آخر رسالة.
-- Input: نص + زر 📎 مرفق + زر إرسال. Enter للإرسال، Shift+Enter سطر جديد.
-- المرفقات: صور preview inline، باقي الملفات chip قابل للتحميل.
+**د) Branches**
+- شاشة جديدة `/branches` لإدارة الفروع (Admin فقط)
+- Dropdown الفرع في كل المكانات يقرأ من Directus بدل قائمة hardcoded
 
-### إشعارات
-- subscribe على `chat_messages` realtime → تحديث badge مباشرة + toast لو الـ widget مغلق.
-- favicon/title prefix: `(3) Dashboard…` لما في رسائل غير مقروءة.
+---
 
-### Typing & Read
-- **Typing**: Supabase Channel `chat:thread:{id}` + presence/broadcast لحدث `typing` (debounce 1s).
-- **Read receipts**: لما الـ thread مفتوح + الرسالة ظاهرة → upsert `chat_reads.last_read_at = now()`. الطرف الآخر يستعلم/يشترك ويعرض ✓✓.
+### المرحلة 3 — تنظيف نهائي
 
-## التغييرات في الادمن
+- حذف ملفات/دوال الديمو غير المستخدمة (`isDemoMode`, `resetDemo`, `DemoBanner` لو ما عاد له معنى)
+- إزالة كل `localStorage` ما عدا: token الـ session، تفضيلات اللغة
+- إصلاح warning المفاتيح المكررة في React (نهائياً، مش بس بالتنظيف)
+- التحقق من كل المسارات (admin, agents, audit, branches, request detail, login, customer upload)
 
-في صفحة `/agents`: عند تحرير ايجنت، إضافة dropdown **"السوبرفايزر المسؤول"** يختار من user_roles=supervisor → يحفظ في `agents.supervisor_user_id`.
+---
 
-في صفحة `/admin`: زر **"المحادثات"** لعرض كل الـ threads (للمراقبة).
+### المرحلة 4 — الجاهزية للإطلاق
 
-## التغييرات على القائمة الموجودة
+- صفحة Login تعمل 100% عبر الـ proxy
+- إنشاء فرع تجريبي + supervisor + agent للتأكد من الـ flow كامل
+- اختبار: تسجيل دخول agent → إنشاء request → رفع صور → supervisor يراجع → admin يوافق
+- التحقق من أن لا شيء يُكتب في localStorage باستثناء الـ session token
 
-- إضافة الـ `<ChatWidget />` داخل `DashboardShell.tsx` (يظهر تلقائياً في admin/agent/audit/agents/requests).
-- لا يظهر للعميل (صفحة `/` و `/r/$requestId`).
-- إضافة ترجمات AR/EN لكل نصوص الشات.
+---
 
-## الملفات الجديدة/المعدّلة
+### ما يبقى لاحقاً (مؤجل حسب طلبك)
 
-**جديدة:**
-- `src/components/ChatWidget.tsx`
-- `src/components/ChatThread.tsx`
-- `src/components/ChatThreadList.tsx` (للسوبرفايزر/الادمن)
-- `src/services/chat.ts` (CRUD + realtime helpers)
-- `src/hooks/useUnreadChatCount.ts`
+- إعداد دومين `docportal.alrahaib.com` (DNS A record)
+- نقل الـ frontend من Lovable hosting إلى السيرفر
+- تركيب Nginx + Let's Encrypt SSL
+- نقل الـ proxy من `/api/directus` (Lovable) إلى Nginx reverse proxy
 
-**معدّلة:**
-- `src/components/DashboardShell.tsx` — حقن ChatWidget
-- `src/components/AgentFormDialog.tsx` — حقل اختيار السوبرفايزر
-- `src/i18n/translations.ts` — نصوص الشات
-- migration واحدة لكل التغييرات أعلاه
+عند هذه النقطة الموقع كله سيعمل مباشرة من سيرفرك على HTTPS.
 
-## ملاحظات وقرارات
+---
 
-1. **هل نحتاج إنشاء أدوار supervisor الآن؟** نعم، لازم يكون عندك على الأقل user واحد بدور `supervisor` ثم تربط الايجنتس فيه من شاشة Agents. تحب أضيف صفحة لإدارة السوبرفايزرز أو يكفي ترقية user يدوياً من الادمن؟
-2. **حد حجم المرفق**: نفس حد الرفع الحالي (5MB) — موافق؟
-3. **سجل/أرشفة**: الرسائل تبقى محفوظة بدون حذف تلقائي.
+### تفاصيل تقنية
 
-بعد موافقتك، أنفّذ كل الخطوات بمرّة واحدة (migration + realtime + UI + إشعارات).
+- استخدام Directus REST API عبر الـ token: `umhu-zcr7HgK-...` (محفوظ مؤقتاً للإعداد، يُلغى بعد الانتهاء)
+- الـ proxy `/api/directus/$` الموجود حالياً يبقى كما هو — يحل مشكلة Mixed Content
+- ملف الإعداد الرئيسي: `src/services/directus.ts` (الموسّع) و `src/services/api.ts` (يُعاد كتابته بالكامل ليصبح wrapper نظيف فوق Directus)
+- Storage للصور: `directus_files` (مدمج، مش محتاج Supabase Storage)
+- Supabase Cloud الموجود حالياً: لا يُستخدم في هذا المسار، يبقى للـ session تخزين فقط أو يُلغى لاحقاً
+
+بعد الموافقة، أنفّذ كل المراحل دفعة واحدة بدون أسئلة وأقللك "الموقع جاهز".

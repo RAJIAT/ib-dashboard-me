@@ -94,8 +94,10 @@ function UploadPage() {
       });
       setDone(true);
       setTimeout(() => navigate({ to: "/success", search: { id } }), 600);
-    } catch {
+    } catch (err) {
+      console.error("Upload failed:", err);
       toast.error("Upload failed. Please try again.");
+      setDone(false);
       setSubmitting(false);
     }
   };

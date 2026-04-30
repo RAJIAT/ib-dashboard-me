@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, RotateCcw, FileText, Loader2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ArrowRight, Check, Download, RotateCcw, FileText, Loader2, X } from "lucide-react";
+import JSZip from "jszip";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/DashboardShell";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -8,7 +9,7 @@ import { useLang } from "@/i18n/LanguageProvider";
 import { isPdfDataUrl } from "@/lib/imageUtils";
 import {
   getCurrentUser, refreshCurrentUser, getRequest, updateRequestStatus, resolveAssetUrl,
-  type InsuranceRequest, type RequestStatus,
+  type AuthUser, type InsuranceRequest, type RequestStatus,
 } from "@/services/api";
 
 export const Route = createFileRoute("/requests/$id")({
@@ -16,6 +17,34 @@ export const Route = createFileRoute("/requests/$id")({
 });
 
 type SavingAction = "quote" | "sold" | "reupload" | "select" | null;
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [meta, b64] = dataUrl.split(",");
+  const mime = /:([^;]+);/.exec(meta)?.[1] ?? "application/octet-stream";
+  const bin = atob(b64);
+  const len = bin.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+function extFromMime(mime: string): string {
+  if (mime === "image/png") return "png";
+  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
+  if (mime === "application/pdf") return "pdf";
+  return "bin";
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
 
 function RequestDetails() {
   const { t, dir, lang } = useLang();
@@ -26,23 +55,30 @@ function RequestDetails() {
   const [savingAction, setSavingAction] = useState<SavingAction>(null);
   const [zoom, setZoom] = useState<string | null>(null);
   const [zoomMime, setZoomMime] = useState<string>("");
+  const [zoomFilename, setZoomFilename] = useState<string>("file");
+  const [zipping, setZipping] = useState(false);
 
-  const user = getCurrentUser();
+  // Read role once on mount; avoids re-running auth checks every render.
+  const [user] = useState<AuthUser | null>(() => getCurrentUser());
   const role = user?.role ?? "agent";
 
   useEffect(() => {
     if (!user) { navigate({ to: "/login" }); return; }
     refreshCurrentUser().then((fresh) => {
-      if (!fresh) { navigate({ to: "/login" }); return; }
+      if (!fresh) navigate({ to: "/login" });
     });
-    getRequest(id).then((r) => { setReq(r); setLoading(false); });
-  }, [id, navigate, user]);
+    let alive = true;
+    getRequest(id).then((r) => { if (alive) { setReq(r); setLoading(false); } });
+    return () => { alive = false; };
+    // run once per id
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   const setStatus = async (s: RequestStatus, action: SavingAction) => {
     if (!req || savingAction) return;
+    if (req.status === s) return; // no-op guard
     const previous = req.status;
-    // Optimistic update
-    setReq({ ...req, status: s });
+    setReq({ ...req, status: s }); // optimistic
     setSavingAction(action);
     try {
       const updated = await updateRequestStatus(req.id, s);
@@ -57,19 +93,73 @@ function RequestDetails() {
   };
 
   const saving = savingAction !== null;
+  void role;
+
+  // Build a flat list of all assets for ZIP download.
+  const allAssets = useMemo(() => {
+    if (!req) return [] as { url: string; baseName: string }[];
+    const list: { url: string; baseName: string }[] = [];
+    if (req.images.registration) list.push({ url: req.images.registration, baseName: "registration" });
+    if (req.images.license) list.push({ url: req.images.license, baseName: "license" });
+    if (req.images.emirates) list.push({ url: req.images.emirates, baseName: "emirates" });
+    if (req.images.inspection) list.push({ url: req.images.inspection, baseName: "inspection" });
+    (req.images.vehiclePhotos ?? []).forEach((u, i) => list.push({ url: u, baseName: `vehicle_${i + 1}` }));
+    return list;
+  }, [req]);
+
+  const downloadAllZip = async () => {
+    if (!req || zipping) return;
+    setZipping(true);
+    try {
+      const zip = new JSZip();
+      for (const a of allAssets) {
+        const { url, mime } = await resolveAssetUrl(a.url);
+        if (!url) continue;
+        let blob: Blob;
+        if (url.startsWith("data:")) {
+          blob = dataUrlToBlob(url);
+        } else if (url.startsWith("blob:") || url.startsWith("http")) {
+          blob = await (await fetch(url)).blob();
+        } else {
+          continue;
+        }
+        const ext = extFromMime(mime || blob.type);
+        zip.file(`${a.baseName}.${ext}`, blob);
+      }
+      const out = await zip.generateAsync({ type: "blob" });
+      triggerDownload(out, `${req.id}.zip`);
+      toast.success(t.details.downloadStarted);
+    } catch {
+      toast.error(t.details.downloadFailed);
+    } finally {
+      setZipping(false);
+    }
+  };
 
   const Back = dir === "rtl" ? ArrowRight : ArrowLeft;
-  const backTo = role === "admin" ? "/admin" : "/agent";
+  const backTo = role === "agent" ? "/agent" : "/admin";
 
   return (
-    <DashboardShell role={role} title={t.details.title}>
-      <Link
-        to={backTo}
-        className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground"
-      >
-        <Back className="h-4 w-4" />
-        {t.details.back}
-      </Link>
+    <DashboardShell role={["admin", "supervisor", "agent"]} title={t.details.title}>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <Link
+          to={backTo}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground"
+        >
+          <Back className="h-4 w-4" />
+          {t.details.back}
+        </Link>
+        {req && allAssets.length > 0 && (
+          <button
+            onClick={downloadAllZip}
+            disabled={zipping}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95 disabled:opacity-60"
+          >
+            {zipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {t.details.downloadAll}
+          </button>
+        )}
+      </div>
 
       {loading || !req ? (
         <p className="py-12 text-center text-muted-foreground">…</p>
@@ -132,15 +222,15 @@ function RequestDetails() {
 
           {/* Image cards */}
           <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <ImgCard label={t.details.registration} url={req.images.registration} onZoom={(u, m) => { setZoom(u); setZoomMime(m); }} pdfLabel={t.details.pdfDocument} />
-            <ImgCard label={t.details.license} url={req.images.license} onZoom={(u, m) => { setZoom(u); setZoomMime(m); }} pdfLabel={t.details.pdfDocument} />
-            <ImgCard label={t.details.emirates} url={req.images.emirates} onZoom={(u, m) => { setZoom(u); setZoomMime(m); }} pdfLabel={t.details.pdfDocument} />
+            <ImgCard label={t.details.registration} baseName="registration" url={req.images.registration} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
+            <ImgCard label={t.details.license} baseName="license" url={req.images.license} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
+            <ImgCard label={t.details.emirates} baseName="emirates" url={req.images.emirates} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
           </div>
 
           {/* Optional: vehicle inspection */}
           {req.images.inspection && (
             <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <ImgCard label={t.details.inspection} url={req.images.inspection} onZoom={(u, m) => { setZoom(u); setZoomMime(m); }} pdfLabel={t.details.pdfDocument} />
+              <ImgCard label={t.details.inspection} baseName="inspection" url={req.images.inspection} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
             </div>
           )}
 
@@ -153,9 +243,11 @@ function RequestDetails() {
                   <ImgCard
                     key={idx}
                     label={`${t.details.vehiclePhotos} ${idx + 1}`}
+                    baseName={`vehicle_${idx + 1}`}
                     url={url}
-                    onZoom={(u, m) => { setZoom(u); setZoomMime(m); }}
+                    onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }}
                     pdfLabel={t.details.pdfDocument}
+                    downloadLabel={t.details.download}
                   />
                 ))}
               </div>
@@ -198,12 +290,30 @@ function RequestDetails() {
           className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-foreground/85 p-4"
           onClick={() => { setZoom(null); setZoomMime(""); }}
         >
-          <button
-            onClick={() => { setZoom(null); setZoomMime(""); }}
-            className="absolute top-4 right-4 inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface text-foreground shadow-soft transition hover:bg-muted"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="absolute top-4 right-4 flex items-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                try {
+                  let blob: Blob;
+                  if (zoom.startsWith("data:")) blob = dataUrlToBlob(zoom);
+                  else { window.open(zoom, "_blank"); return; }
+                  const ext = extFromMime(zoomMime || blob.type);
+                  triggerDownload(blob, `${zoomFilename}.${ext}`);
+                } catch { toast.error(t.details.downloadFailed); }
+              }}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full bg-surface px-3 text-sm font-semibold text-foreground shadow-soft transition hover:bg-muted"
+            >
+              <Download className="h-4 w-4" />
+              {t.details.download}
+            </button>
+            <button
+              onClick={() => { setZoom(null); setZoomMime(""); }}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface text-foreground shadow-soft transition hover:bg-muted"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
           {isPdfDataUrl(zoom) || zoomMime === "application/pdf" ? (
             <iframe
               src={zoom}
@@ -252,32 +362,63 @@ function useAssetUrl(url: string): { src: string; mime: string; loading: boolean
 }
 
 function ImgCard({
-  label, url, onZoom, pdfLabel,
-}: { label: string; url: string; onZoom: (u: string, mime: string) => void; pdfLabel: string }) {
+  label, baseName, url, onZoom, pdfLabel, downloadLabel,
+}: {
+  label: string; baseName: string; url: string;
+  onZoom: (u: string, mime: string, filename: string) => void;
+  pdfLabel: string; downloadLabel: string;
+}) {
   const { src, mime, loading } = useAssetUrl(url);
   const pdf = isPdfDataUrl(src) || mime === "application/pdf";
+  const onDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!src) return;
+    try {
+      let blob: Blob;
+      if (src.startsWith("data:")) blob = dataUrlToBlob(src);
+      else { window.open(src, "_blank"); return; }
+      const ext = extFromMime(mime || blob.type);
+      triggerDownload(blob, `${baseName}.${ext}`);
+    } catch { /* noop */ }
+  };
   return (
-    <button
-      onClick={() => src && onZoom(src, mime)}
-      className="group block overflow-hidden rounded-2xl border border-border bg-card text-start shadow-card transition hover:shadow-elevated active:scale-[0.99]"
+    <div
+      className="group relative overflow-hidden rounded-2xl border border-border bg-card text-start shadow-card transition hover:shadow-elevated"
     >
-      <div className="aspect-[4/3] w-full overflow-hidden bg-muted">
-        {pdf ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-primary-soft/40 text-primary">
-            <FileText className="h-12 w-12" />
-            <span className="text-xs font-semibold">{pdfLabel}</span>
-          </div>
-        ) : src ? (
-          <img src={src} alt={label} className="h-full w-full object-cover transition group-hover:scale-105" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-            {loading ? "…" : "—"}
-          </div>
-        )}
-      </div>
-      <div className="px-4 py-3">
-        <div className="text-sm font-semibold text-foreground">{label}</div>
-      </div>
-    </button>
+      <button
+        type="button"
+        onClick={() => src && onZoom(src, mime, baseName)}
+        className="block w-full text-start active:scale-[0.99]"
+      >
+        <div className="aspect-[4/3] w-full overflow-hidden bg-muted">
+          {pdf ? (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-primary-soft/40 text-primary">
+              <FileText className="h-12 w-12" />
+              <span className="text-xs font-semibold">{pdfLabel}</span>
+            </div>
+          ) : src ? (
+            <img src={src} alt={label} className="h-full w-full object-cover transition group-hover:scale-105" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+              {loading ? "…" : "—"}
+            </div>
+          )}
+        </div>
+        <div className="px-4 py-3">
+          <div className="text-sm font-semibold text-foreground">{label}</div>
+        </div>
+      </button>
+      {src && (
+        <button
+          type="button"
+          onClick={onDownload}
+          aria-label={downloadLabel}
+          title={downloadLabel}
+          className="absolute top-2 end-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-surface/95 text-foreground shadow-soft transition hover:bg-muted active:scale-95"
+        >
+          <Download className="h-4 w-4" />
+        </button>
+      )}
+    </div>
   );
 }

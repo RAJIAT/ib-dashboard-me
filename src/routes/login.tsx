@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Loader2, Shield, User } from "lucide-react";
+import { Loader2, Shield, ShieldCheck, User } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo } from "@/components/Logo";
 import { useLang } from "@/i18n/LanguageProvider";
@@ -24,7 +24,7 @@ function LoginPage() {
     setLoading(true);
     try {
       const u = await login(email, password);
-      navigate({ to: u.role === "admin" ? "/admin" : "/agent" });
+      navigate({ to: u.role === "admin" || u.role === "supervisor" ? "/admin" : "/agent" });
     } catch {
       setError(t.auth.invalid);
     } finally {
@@ -80,7 +80,7 @@ function LoginPage() {
 
           <div className="pt-2">
             <p className="mb-2 text-center text-xs font-semibold text-muted-foreground">{t.auth.quickFill}</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
                 onClick={() => { setEmail("admin@aib.com"); setPassword("demo"); }}
@@ -88,6 +88,14 @@ function LoginPage() {
               >
                 <Shield className="h-3.5 w-3.5" />
                 {t.auth.asAdmin}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEmail("supervisor@aib.com"); setPassword("demo"); }}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface text-xs font-semibold text-foreground transition hover:bg-muted"
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                {t.auth.asSupervisor}
               </button>
               <button
                 type="button"

@@ -71,6 +71,7 @@ export const translations = {
       quickFill: "تعبئة سريعة",
       asAdmin: "كمسؤول",
       asAgent: "كوكيل",
+      asSupervisor: "كمشرف",
       invalid: "بيانات الدخول غير صحيحة",
     },
     nav: {
@@ -114,6 +115,10 @@ export const translations = {
       saved: "تم الحفظ",
       statusUpdated: "تم تحديث الحالة",
       pdfDocument: "ملف PDF",
+      download: "تنزيل",
+      downloadAll: "تنزيل كل الملفات (ZIP)",
+      downloadStarted: "بدأ التنزيل",
+      downloadFailed: "تعذّر التنزيل",
     },
     agent: {
       yoursOnly: "هذه الطلبات تخصك فقط",
@@ -263,6 +268,7 @@ export const translations = {
       quickFill: "Quick fill",
       asAdmin: "as Admin",
       asAgent: "as Agent",
+      asSupervisor: "as Supervisor",
       invalid: "Invalid credentials",
     },
     nav: {
@@ -306,6 +312,10 @@ export const translations = {
       saved: "Saved",
       statusUpdated: "Status updated",
       pdfDocument: "PDF document",
+      download: "Download",
+      downloadAll: "Download all (ZIP)",
+      downloadStarted: "Download started",
+      downloadFailed: "Download failed",
     },
     agent: {
       yoursOnly: "These requests are yours only",

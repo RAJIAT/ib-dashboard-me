@@ -8,7 +8,7 @@ import { useLang } from "@/i18n/LanguageProvider";
 import { useRequestsLive } from "@/hooks/useRequestsLive";
 import {
   getCurrentUser, refreshCurrentUser, listAgents, listBranches,
-  subscribeAgents, type Agent, type RequestStatus,
+  subscribeAgents, type Agent, type AuthUser, type RequestStatus,
 } from "@/services/api";
 
 export const Route = createFileRoute("/admin")({
@@ -18,27 +18,42 @@ export const Route = createFileRoute("/admin")({
 function AdminDashboard() {
   const { t, dir, lang } = useLang();
   const navigate = useNavigate();
-  const { items, loading } = useRequestsLive();
+  const [user] = useState<AuthUser | null>(() => getCurrentUser());
+
+  const isSupervisor = user?.role === "supervisor";
+  const lockedBranch = isSupervisor ? user?.branch ?? "" : "";
+
+  const { items, loading } = useRequestsLive(
+    isSupervisor && lockedBranch ? { branch: lockedBranch } : undefined,
+  );
 
   const [agentF, setAgentF] = useState("");
-  const [branchF, setBranchF] = useState("");
+  const [branchF, setBranchF] = useState(lockedBranch);
   const [statusF, setStatusF] = useState<"" | RequestStatus>("");
   const [dateF, setDateF] = useState("");
   const [isPending, startTransition] = useTransition();
 
   // Stable agents/branches snapshot — refreshed only on subscription change.
   const [agents, setAgents] = useState<Agent[]>(() => listAgents());
-  const branches = useMemo(() => listBranches(), []);
+  const allBranches = useMemo(() => listBranches(), []);
+  const branches = useMemo(
+    () => (isSupervisor && lockedBranch ? [lockedBranch] : allBranches),
+    [isSupervisor, lockedBranch, allBranches],
+  );
 
   useEffect(() => {
     const u = getCurrentUser();
-    if (!u || u.role !== "admin") { navigate({ to: "/login" }); return; }
+    if (!u || (u.role !== "admin" && u.role !== "supervisor")) {
+      navigate({ to: "/login" });
+      return;
+    }
     refreshCurrentUser().then((fresh) => {
-      if (!fresh || fresh.role !== "admin") navigate({ to: "/login" });
+      if (!fresh || (fresh.role !== "admin" && fresh.role !== "supervisor")) navigate({ to: "/login" });
     });
     const off = subscribeAgents(() => setAgents(listAgents()));
     return () => off();
-  }, [navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Defer date input — only field that fires per keystroke.
   const deferredDate = useDeferredValue(dateF);
@@ -103,7 +118,7 @@ function AdminDashboard() {
   if (dateF) activeChips.push({ label: `${t.admin.filterDate}: ${dateF}`, clear: () => startTransition(() => setDateF("")) });
 
   return (
-    <DashboardShell role="admin" title={t.admin.title}>
+    <DashboardShell role={["admin", "supervisor"]} title={isSupervisor ? `${t.admin.title} — ${lockedBranch}` : t.admin.title}>
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label={t.admin.total} value={stats.total} icon={<FileText className="h-5 w-5" />} tone="primary" />
@@ -118,7 +133,7 @@ function AdminDashboard() {
           <Select value={agentF} onChange={wrap(setAgentF)} label={t.admin.filterAgent} all={t.admin.all}
             options={agentOptions} />
           <Select value={branchF} onChange={wrap(setBranchF)} label={t.admin.filterBranch} all={t.admin.all}
-            options={branchOptions} />
+            options={branchOptions} disabled={isSupervisor} />
           <Select value={statusF} onChange={(v) => startTransition(() => setStatusF(v as RequestStatus | ""))} label={t.admin.filterStatus} all={t.admin.all}
             options={statusOptions} />
           <label className="block">
@@ -268,18 +283,19 @@ function StatCard({
 }
 
 function Select({
-  value, onChange, label, all, options,
+  value, onChange, label, all, options, disabled,
 }: {
   value: string; onChange: (v: string) => void; label: string; all: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string }[]; disabled?: boolean;
 }) {
   return (
     <label className="block">
       <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">{label}</span>
       <select
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground"
+        className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-60"
       >
         <option value="">{all}</option>
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

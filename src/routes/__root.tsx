@@ -1,9 +1,36 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { Component, type ReactNode } from "react";
 import { LanguageProvider, useLang } from "@/i18n/LanguageProvider";
 import { DemoBanner } from "@/components/DemoBanner";
 import { Footer } from "@/components/Footer";
 import { Toaster } from "@/components/ui/sonner";
 import appCss from "../styles.css?url";
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error) { console.error("App error boundary:", error); }
+  reset = () => this.setState({ error: null });
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center">
+          <h1 className="text-2xl font-bold text-foreground">حدث خطأ غير متوقع</h1>
+          <p className="max-w-md text-sm text-muted-foreground">
+            صار في مشكلة. اضغط الزر لإعادة تحميل الصفحة.
+          </p>
+          <button
+            onClick={() => { this.reset(); if (typeof window !== "undefined") window.location.reload(); }}
+            className="inline-flex h-11 items-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-soft"
+          >
+            إعادة التحميل
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function NotFoundComponent() {
   return (
@@ -75,9 +102,11 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   return (
-    <LanguageProvider>
-      <AppChrome />
-    </LanguageProvider>
+    <AppErrorBoundary>
+      <LanguageProvider>
+        <AppChrome />
+      </LanguageProvider>
+    </AppErrorBoundary>
   );
 }
 

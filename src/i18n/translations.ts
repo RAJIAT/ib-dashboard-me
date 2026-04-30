@@ -464,7 +464,7 @@ export const translations = {
       shareEmailBody: "Attached is a ZIP file containing all request documents",
       shareEmailHint: "ZIP downloaded — attach it to the email before sending",
       attachments: "Other attachments",
-      markLinkSent: "Mark link sent",
+      markLinkSent: "Payment link sent",
       copyReuploadLink: "Copy reupload link",
       reuploadLinkCopied: "Link copied",
       notesTitle: "Notes & missing items",

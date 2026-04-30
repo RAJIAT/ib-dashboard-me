@@ -577,7 +577,7 @@ export async function appendAttachmentsToRequest(
   return all[idx];
 }
 
-export function isDemoMode() { return true; }
+export function isDemoMode() { return false; }
 
 export function resetDemo() {
   if (typeof window === "undefined") return;

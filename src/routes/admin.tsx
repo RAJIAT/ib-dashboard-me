@@ -64,6 +64,17 @@ function AdminDashboard() {
     return m;
   }, [agents]);
 
+  const supervisorByAgentId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of agents) {
+      if (a.role === "agent" && a.supervisorId) {
+        const sup = agents.find((x) => x.id === a.supervisorId);
+        if (sup) m.set(a.id, sup.name);
+      }
+    }
+    return m;
+  }, [agents]);
+
   const agentOptions = useMemo(
     () => agents.map((a) => ({ value: a.id, label: a.name })),
     [agents],
@@ -205,7 +216,15 @@ function AdminDashboard() {
               filtered.map((r) => (
                 <tr key={r.id} className="border-t border-border transition hover:bg-muted/30">
                   <td className="px-5 py-4 font-semibold text-foreground">{r.id}</td>
-                  <td className="px-5 py-4 text-foreground">{r.agentName}</td>
+                  <td className="px-5 py-4 text-foreground">
+                    <div>{r.agentName}</div>
+                    {!isSupervisor && supervisorByAgentId.get(r.agentId) && (
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {lang === "ar" ? "السوبرفايزر: " : "Supervisor: "}
+                        {supervisorByAgentId.get(r.agentId)}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-5 py-4 text-muted-foreground">{r.branch}</td>
                   <td className="px-5 py-4 text-muted-foreground">
                     {new Date(r.createdAt).toLocaleString(lang === "ar" ? "ar-AE" : "en-GB", {
@@ -250,6 +269,12 @@ function AdminDashboard() {
                 <StatusBadge status={r.status} />
               </div>
               <div className="mt-2 text-sm text-foreground">{r.agentName}</div>
+              {!isSupervisor && supervisorByAgentId.get(r.agentId) && (
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {lang === "ar" ? "السوبرفايزر: " : "Supervisor: "}
+                  {supervisorByAgentId.get(r.agentId)}
+                </div>
+              )}
               <div className="mt-0.5 flex items-center justify-between text-xs text-muted-foreground">
                 <span>{r.branch}</span>
                 <span>{new Date(r.createdAt).toLocaleDateString(lang === "ar" ? "ar-AE" : "en-GB")}</span>

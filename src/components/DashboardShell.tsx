@@ -1,10 +1,10 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { LayoutDashboard, LogOut, Menu, Users, X } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo } from "@/components/Logo";
 import { useLang } from "@/i18n/LanguageProvider";
-import { getCurrentUser, logout, type Role } from "@/services/api";
+import { canManageAgents, getCurrentUser, logout, type Role } from "@/services/api";
 
 type NavItem = { to: string; label: string; icon: ReactNode };
 
@@ -13,36 +13,46 @@ export function DashboardShell({
   children,
   title,
 }: {
-  role: Role;
+  role: Role | Role[];
   children: ReactNode;
   title?: string;
 }) {
   const { t, dir } = useLang();
   const navigate = useNavigate();
-  const [user, setUser] = useState(getCurrentUser());
+  // Read once on mount (not on every render); avoids redirect loops from unstable refs.
+  const [user] = useState(() => getCurrentUser());
   const [open, setOpen] = useState(false);
   const path = useRouterState({ select: (s) => s.location.pathname });
 
+  const allowed = useMemo(() => (Array.isArray(role) ? role : [role]), [role]);
+
   useEffect(() => {
-    const u = getCurrentUser();
-    if (!u || u.role !== role) {
+    if (!user || !allowed.includes(user.role)) {
       navigate({ to: "/login" });
-      return;
     }
-    setUser(u);
-  }, [role, navigate]);
+    // run once — `user` and `allowed` are stable across renders
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { setOpen(false); }, [path]);
 
-  const items: NavItem[] =
-    role === "admin"
-      ? [
-          { to: "/admin", label: t.nav.dashboard, icon: <LayoutDashboard className="h-5 w-5" /> },
-          { to: "/agents", label: t.admin.manageAgents, icon: <Users className="h-5 w-5" /> },
-        ]
-      : [
-          { to: "/agent", label: t.nav.requests, icon: <LayoutDashboard className="h-5 w-5" /> },
-        ];
+  const items: NavItem[] = useMemo(() => {
+    if (!user) return [];
+    if (user.role === "admin") {
+      return [
+        { to: "/admin", label: t.nav.dashboard, icon: <LayoutDashboard className="h-5 w-5" /> },
+        { to: "/agents", label: t.admin.manageAgents, icon: <Users className="h-5 w-5" /> },
+      ];
+    }
+    if (user.role === "supervisor") {
+      return [
+        { to: "/admin", label: t.nav.dashboard, icon: <LayoutDashboard className="h-5 w-5" /> },
+      ];
+    }
+    return [
+      { to: "/agent", label: t.nav.requests, icon: <LayoutDashboard className="h-5 w-5" /> },
+    ];
+  }, [user, t]);
 
   const onLogout = () => {
     logout();
@@ -52,16 +62,16 @@ export function DashboardShell({
   if (!user) return null;
 
   const sideBorder = dir === "rtl" ? "border-l" : "border-r";
+  // Suppress unused warning — kept for potential per-shell admin gating
+  void canManageAgents;
 
   return (
     <div className="min-h-screen bg-background">
       <div className="flex min-h-screen">
-        {/* Desktop sidebar */}
         <aside className={`hidden lg:flex w-72 shrink-0 flex-col bg-sidebar p-5 ${sideBorder} border-border`}>
           <SidebarInner items={items} user={user} onLogout={onLogout} />
         </aside>
 
-        {/* Mobile drawer */}
         {open && (
           <div className="fixed inset-0 z-50 lg:hidden">
             <div className="absolute inset-0 bg-foreground/40" onClick={() => setOpen(false)} />

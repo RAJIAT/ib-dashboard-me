@@ -140,14 +140,26 @@ function RequestDetails() {
   const backTo = role === "agent" ? "/agent" : "/admin";
 
   return (
-    <DashboardShell role={role} title={t.details.title}>
-      <Link
-        to={backTo}
-        className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground"
-      >
-        <Back className="h-4 w-4" />
-        {t.details.back}
-      </Link>
+    <DashboardShell role={["admin", "supervisor", "agent"]} title={t.details.title}>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <Link
+          to={backTo}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground"
+        >
+          <Back className="h-4 w-4" />
+          {t.details.back}
+        </Link>
+        {req && allAssets.length > 0 && (
+          <button
+            onClick={downloadAllZip}
+            disabled={zipping}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95 disabled:opacity-60"
+          >
+            {zipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {t.details.downloadAll}
+          </button>
+        )}
+      </div>
 
       {loading || !req ? (
         <p className="py-12 text-center text-muted-foreground">…</p>
@@ -210,15 +222,15 @@ function RequestDetails() {
 
           {/* Image cards */}
           <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <ImgCard label={t.details.registration} url={req.images.registration} onZoom={(u, m) => { setZoom(u); setZoomMime(m); }} pdfLabel={t.details.pdfDocument} />
-            <ImgCard label={t.details.license} url={req.images.license} onZoom={(u, m) => { setZoom(u); setZoomMime(m); }} pdfLabel={t.details.pdfDocument} />
-            <ImgCard label={t.details.emirates} url={req.images.emirates} onZoom={(u, m) => { setZoom(u); setZoomMime(m); }} pdfLabel={t.details.pdfDocument} />
+            <ImgCard label={t.details.registration} baseName="registration" url={req.images.registration} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
+            <ImgCard label={t.details.license} baseName="license" url={req.images.license} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
+            <ImgCard label={t.details.emirates} baseName="emirates" url={req.images.emirates} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
           </div>
 
           {/* Optional: vehicle inspection */}
           {req.images.inspection && (
             <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <ImgCard label={t.details.inspection} url={req.images.inspection} onZoom={(u, m) => { setZoom(u); setZoomMime(m); }} pdfLabel={t.details.pdfDocument} />
+              <ImgCard label={t.details.inspection} baseName="inspection" url={req.images.inspection} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
             </div>
           )}
 
@@ -231,9 +243,11 @@ function RequestDetails() {
                   <ImgCard
                     key={idx}
                     label={`${t.details.vehiclePhotos} ${idx + 1}`}
+                    baseName={`vehicle_${idx + 1}`}
                     url={url}
-                    onZoom={(u, m) => { setZoom(u); setZoomMime(m); }}
+                    onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }}
                     pdfLabel={t.details.pdfDocument}
+                    downloadLabel={t.details.download}
                   />
                 ))}
               </div>

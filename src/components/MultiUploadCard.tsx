@@ -88,12 +88,16 @@ export function MultiUploadCard({
   };
 
   const canAddMore = files.length < max;
-  const acceptAttr = allowVideo
-    ? "image/jpeg,image/jpg,image/png,application/pdf,video/*"
-    : "image/jpeg,image/jpg,image/png,application/pdf";
-  const formatHint = allowVideo
-    ? "JPG · PNG · PDF · MP4 / MOV (≤ 50MB)"
-    : "JPG · PNG · PDF · ≤ 2MB";
+  const acceptAttr = acceptAny
+    ? "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.zip"
+    : allowVideo
+      ? "image/jpeg,image/jpg,image/png,application/pdf,video/*"
+      : "image/jpeg,image/jpg,image/png,application/pdf";
+  const formatHint = acceptAny
+    ? "Images · PDF · Docs · ≤ 5MB"
+    : allowVideo
+      ? "JPG · PNG · PDF · MP4 / MOV (≤ 50MB)"
+      : "JPG · PNG · PDF · ≤ 5MB";
   const counterTotal = Math.max(max, min);
   const counterCurrent = files.length;
   const showCounter = files.length > 0 || min > 0;

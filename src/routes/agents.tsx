@@ -100,8 +100,12 @@ function AdminAgents() {
     toast.success(t.agents.deleted);
   };
 
+  const isSupervisorTab = effectiveTab === "supervisor";
+  const addLabel = isSupervisorTab ? t.agents.addSupervisor : t.agents.add;
+  const emptyLabel = isSupervisorTab ? t.agents.emptySupervisors : t.agents.empty;
+
   return (
-    <DashboardShell role="admin" title={t.agents.title}>
+    <DashboardShell role={["admin", "supervisor"]} title={t.agents.title}>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link
@@ -118,9 +122,38 @@ function AdminAgents() {
           className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95"
         >
           <Plus className="h-4 w-4" />
-          {t.agents.add}
+          {addLabel}
         </button>
       </div>
+
+      {/* Role tabs (admin only — supervisors stay on Agents) */}
+      {isAdmin && (
+        <div
+          role="tablist"
+          className="mb-4 inline-flex rounded-xl border border-border bg-surface p-1 text-sm"
+        >
+          <button
+            role="tab"
+            aria-selected={tab === "agent"}
+            onClick={() => setTab("agent")}
+            className={`rounded-lg px-4 py-2 font-semibold transition ${
+              tab === "agent" ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.agents.tabAgents}
+          </button>
+          <button
+            role="tab"
+            aria-selected={tab === "supervisor"}
+            onClick={() => setTab("supervisor")}
+            className={`rounded-lg px-4 py-2 font-semibold transition ${
+              tab === "supervisor" ? "bg-primary text-primary-foreground shadow-soft" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.agents.tabSupervisors}
+          </button>
+        </div>
+      )}
 
       {/* Desktop table */}
       <div className="hidden overflow-hidden rounded-2xl border border-border bg-card shadow-card md:block">

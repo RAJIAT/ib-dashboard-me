@@ -142,6 +142,10 @@ export const translations = {
       downloadAll: "تنزيل كل الملفات (ZIP)",
       downloadStarted: "بدأ التنزيل",
       downloadFailed: "تعذّر التنزيل",
+      shareEmail: "مشاركة بالإيميل",
+      shareEmailSubject: "مستندات الطلب",
+      shareEmailBody: "مرفق ملف ZIP يحتوي على جميع مستندات الطلب",
+      shareEmailHint: "تم تنزيل ملف ZIP — أرفقه بالإيميل قبل الإرسال",
     },
     agent: {
       yoursOnly: "هذه الطلبات تخصك فقط",

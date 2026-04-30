@@ -99,13 +99,17 @@ function RequestDetails() {
   const allAssets = useMemo(() => {
     if (!req) return [] as { url: string; baseName: string }[];
     const list: { url: string; baseName: string }[] = [];
-    if (req.images.registrationFront) list.push({ url: req.images.registrationFront, baseName: "registration_front" });
-    if (req.images.registrationBack) list.push({ url: req.images.registrationBack, baseName: "registration_back" });
+    (req.images.registration ?? []).forEach((u, i) =>
+      list.push({ url: u, baseName: i === 0 ? "registration_front" : i === 1 ? "registration_back" : `registration_${i + 1}` }),
+    );
     if (req.images.license) list.push({ url: req.images.license, baseName: "license" });
-    if (req.images.emiratesFront) list.push({ url: req.images.emiratesFront, baseName: "emirates_front" });
-    if (req.images.emiratesBack) list.push({ url: req.images.emiratesBack, baseName: "emirates_back" });
+    (req.images.emirates ?? []).forEach((u, i) =>
+      list.push({ url: u, baseName: i === 0 ? "emirates_front" : i === 1 ? "emirates_back" : `emirates_${i + 1}` }),
+    );
     if (req.images.inspection) list.push({ url: req.images.inspection, baseName: "inspection" });
-    (req.images.vehiclePhotos ?? []).forEach((u, i) => list.push({ url: u, baseName: `vehicle_${i + 1}` }));
+    (req.images.vehicleMedia ?? []).forEach((m, i) => {
+      if (m.kind === "image") list.push({ url: m.url, baseName: `vehicle_${i + 1}` });
+    });
     return list;
   }, [req]);
 
@@ -222,28 +226,32 @@ function RequestDetails() {
             </div>
           )}
 
-          {/* Image cards */}
+          {/* Image cards: registration (front + back), license, emirates (front + back) */}
           <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <ImgCard label={t.details.registrationFront} baseName="registration_front" url={req.images.registrationFront} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
-            <ImgCard label={t.details.registrationBack} baseName="registration_back" url={req.images.registrationBack} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
+            {(req.images.registration ?? []).map((url, i) => (
+              <ImgCard
+                key={`reg-${i}`}
+                label={i === 0 ? t.details.registrationFront : i === 1 ? t.details.registrationBack : `${t.details.registration} ${i + 1}`}
+                baseName={i === 0 ? "registration_front" : i === 1 ? "registration_back" : `registration_${i + 1}`}
+                url={url}
+                onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }}
+                pdfLabel={t.details.pdfDocument}
+                downloadLabel={t.details.download}
+              />
+            ))}
             <ImgCard label={t.details.license} baseName="license" url={req.images.license} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
-            <ImgCard label={t.details.emiratesFront} baseName="emirates_front" url={req.images.emiratesFront} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
-            <ImgCard label={t.details.emiratesBack} baseName="emirates_back" url={req.images.emiratesBack} onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }} pdfLabel={t.details.pdfDocument} downloadLabel={t.details.download} />
+            {(req.images.emirates ?? []).map((url, i) => (
+              <ImgCard
+                key={`eid-${i}`}
+                label={i === 0 ? t.details.emiratesFront : i === 1 ? t.details.emiratesBack : `${t.details.emirates} ${i + 1}`}
+                baseName={i === 0 ? "emirates_front" : i === 1 ? "emirates_back" : `emirates_${i + 1}`}
+                url={url}
+                onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }}
+                pdfLabel={t.details.pdfDocument}
+                downloadLabel={t.details.download}
+              />
+            ))}
           </div>
-
-          {/* Vehicle video (metadata in demo mode) */}
-          {req.images.vehicleVideo && (
-            <div className="mt-4 rounded-2xl border border-border bg-card p-5 shadow-card">
-              <h3 className="mb-2 text-sm font-bold text-foreground">{t.details.vehicleVideo}</h3>
-              <p className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{req.images.vehicleVideo.name}</span>
-                {" · "}
-                {(req.images.vehicleVideo.size / (1024 * 1024)).toFixed(1)} MB
-                {" · "}
-                {req.images.vehicleVideo.type || "video"}
-              </p>
-            </div>
-          )}
 
           {/* Optional: vehicle inspection */}
           {req.images.inspection && (
@@ -252,22 +260,38 @@ function RequestDetails() {
             </div>
           )}
 
-          {/* Optional: vehicle photos */}
-          {req.images.vehiclePhotos && req.images.vehiclePhotos.length > 0 && (
+          {/* Vehicle media: photos + video metadata */}
+          {req.images.vehicleMedia && req.images.vehicleMedia.length > 0 && (
             <div className="mt-6">
               <h3 className="mb-3 text-sm font-bold text-foreground">{t.details.vehiclePhotos}</h3>
               <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-                {req.images.vehiclePhotos.map((url, idx) => (
-                  <ImgCard
-                    key={idx}
-                    label={`${t.details.vehiclePhotos} ${idx + 1}`}
-                    baseName={`vehicle_${idx + 1}`}
-                    url={url}
-                    onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }}
-                    pdfLabel={t.details.pdfDocument}
-                    downloadLabel={t.details.download}
-                  />
-                ))}
+                {req.images.vehicleMedia.map((m, idx) => {
+                  if (m.kind === "image") {
+                    return (
+                      <ImgCard
+                        key={idx}
+                        label={`${t.details.vehiclePhotos} ${idx + 1}`}
+                        baseName={`vehicle_${idx + 1}`}
+                        url={m.url}
+                        onZoom={(u, mm, n) => { setZoom(u); setZoomMime(mm); setZoomFilename(n); }}
+                        pdfLabel={t.details.pdfDocument}
+                        downloadLabel={t.details.download}
+                      />
+                    );
+                  }
+                  return (
+                    <div
+                      key={idx}
+                      className="flex flex-col gap-1 rounded-2xl border border-border bg-card p-4 shadow-card"
+                    >
+                      <span className="text-xs font-semibold text-muted-foreground">{t.details.vehicleVideo}</span>
+                      <span className="truncate text-sm font-medium text-foreground" title={m.name}>{m.name}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {(m.size / (1024 * 1024)).toFixed(1)} MB · {m.type || "video"}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

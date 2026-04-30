@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Download, RotateCcw, FileText, Loader2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, RotateCcw, FileText, Loader2, X, Mail } from "lucide-react";
 import JSZip from "jszip";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/DashboardShell";

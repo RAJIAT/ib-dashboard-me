@@ -135,18 +135,20 @@ export function syncThreads(): ChatThread[] {
 
   for (const a of agents) {
     if (a.role !== "agent") continue;
-    // Find supervisor: prefer explicit supervisorId on agent, else same-branch supervisor.
+    // Find supervisor: prefer explicit supervisorId on agent, else same-branch supervisor,
+    // else fall back to ANY active supervisor so the agent can still chat.
     const explicit = (a as Agent & { supervisorId?: string }).supervisorId;
     let sup = explicit ? supervisors.find((s) => s.id === explicit || s.userId === explicit) : undefined;
-    if (!sup) sup = supervisors.find((s) => s.branch === a.branch);
-    if (!sup) continue;
+    if (!sup) sup = supervisors.find((s) => s.branch === a.branch && s.active);
+    if (!sup) sup = supervisors.find((s) => s.active);
+    if (!sup) sup = supervisors[0];
     const prev = map.get(a.id);
     map.set(a.id, {
       id: a.id,
       agentId: a.id,
       agentName: a.name,
-      supervisorId: sup.userId ?? `agent:${sup.id}`,
-      supervisorName: sup.name,
+      supervisorId: sup?.userId ?? (sup ? `agent:${sup.id}` : "admin"),
+      supervisorName: sup?.name ?? "Admin",
       branch: a.branch,
       lastMessageAt: prev?.lastMessageAt,
       lastMessagePreview: prev?.lastMessagePreview,

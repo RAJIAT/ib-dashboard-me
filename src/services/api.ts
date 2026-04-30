@@ -390,14 +390,11 @@ export async function submitUpload(input: {
   customerEmail?: string;
   customerPhone?: string;
   images: {
-    /** Front + back images of the registration card (in this order). */
     registration: File[];
-    /** Front + back images of the driving license (in this order). */
     license: File[];
-    /** Front + back images of the Emirates ID (in this order). */
     emirates: File[];
-    /** Mix of vehicle photos and videos. */
     vehicleMedia: File[];
+    attachments?: File[];
   };
   optional?: { inspection?: File | null };
 }): Promise<{ id: string }> {
@@ -407,8 +404,6 @@ export async function submitUpload(input: {
     Promise.all(input.images.emirates.map((f) => fileToDataUrl(f))),
   ]);
   const inspection = input.optional?.inspection ? await fileToDataUrl(input.optional.inspection) : undefined;
-  // Demo mode: store image data URLs but only video metadata (localStorage
-  // ~5MB quota). Real backend will replace with object storage URLs.
   const vehicleMedia: InsuranceRequest["images"]["vehicleMedia"] = [];
   for (const f of input.images.vehicleMedia) {
     if (f.type.startsWith("video/")) {
@@ -416,6 +411,15 @@ export async function submitUpload(input: {
     } else {
       vehicleMedia.push({ kind: "image", url: await fileToDataUrl(f) });
     }
+  }
+  const attachments: AttachmentMeta[] = [];
+  for (const f of input.images.attachments ?? []) {
+    attachments.push({
+      name: f.name,
+      type: f.type,
+      size: f.size,
+      url: await fileToDataUrl(f),
+    });
   }
 
   const agent = listAgents().find((a) => a.id === input.agentId);
@@ -432,12 +436,94 @@ export async function submitUpload(input: {
     customerName: input.customerName,
     customerEmail: input.customerEmail,
     customerPhone: input.customerPhone,
-    images: { registration, license, emirates, vehicleMedia, inspection },
+    notes: [],
+    images: { registration, license, emirates, vehicleMedia, inspection, attachments },
   };
   all.unshift(req);
   writeRequests(all);
   notifyChange();
   return { id };
+}
+
+// ---------------------------------------------------------------------------
+// Notes / missing items
+// ---------------------------------------------------------------------------
+
+export async function addRequestNote(
+  requestId: string,
+  input: { text: string; kind: RequestNoteKind },
+): Promise<InsuranceRequest> {
+  const me = getCurrentUser();
+  if (!me) throw new Error("Not authenticated");
+  const all = readRequests();
+  const idx = all.findIndex((r) => r.id === requestId || r.uuid === requestId);
+  if (idx === -1) throw new Error("Request not found");
+  const note: RequestNote = {
+    id: uuid(),
+    authorId: me.id,
+    authorName: me.name,
+    authorRole: me.role,
+    text: input.text.trim(),
+    kind: input.kind,
+    createdAt: new Date().toISOString(),
+  };
+  all[idx] = { ...all[idx], notes: [...(all[idx].notes ?? []), note] };
+  writeRequests(all);
+  notifyChange();
+  return all[idx];
+}
+
+export async function resolveRequestNote(
+  requestId: string,
+  noteId: string,
+): Promise<InsuranceRequest> {
+  const all = readRequests();
+  const idx = all.findIndex((r) => r.id === requestId || r.uuid === requestId);
+  if (idx === -1) throw new Error("Request not found");
+  const notes = (all[idx].notes ?? []).map((n) =>
+    n.id === noteId && !n.resolvedAt ? { ...n, resolvedAt: new Date().toISOString() } : n,
+  );
+  all[idx] = { ...all[idx], notes };
+  writeRequests(all);
+  notifyChange();
+  return all[idx];
+}
+
+/** Append additional attachments to an existing request (used by /r/$id reupload page). */
+export async function appendAttachmentsToRequest(
+  requestId: string,
+  files: File[],
+): Promise<InsuranceRequest> {
+  const all = readRequests();
+  const idx = all.findIndex((r) => r.id === requestId || r.uuid === requestId);
+  if (idx === -1) throw new Error("Request not found");
+  const newAttachments: AttachmentMeta[] = [];
+  for (const f of files) {
+    if (f.type.startsWith("video/")) continue;
+    newAttachments.push({
+      name: f.name,
+      type: f.type,
+      size: f.size,
+      url: await fileToDataUrl(f),
+    });
+  }
+  const cur = all[idx];
+  // Auto-resolve open "missing" notes and move status back to processing.
+  const notes = (cur.notes ?? []).map((n) =>
+    n.kind === "missing" && !n.resolvedAt ? { ...n, resolvedAt: new Date().toISOString() } : n,
+  );
+  all[idx] = {
+    ...cur,
+    status: "processing",
+    notes,
+    images: {
+      ...cur.images,
+      attachments: [...(cur.images.attachments ?? []), ...newAttachments],
+    },
+  };
+  writeRequests(all);
+  notifyChange();
+  return all[idx];
 }
 
 export function isDemoMode() { return true; }

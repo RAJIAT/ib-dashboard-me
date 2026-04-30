@@ -234,7 +234,21 @@ export async function refreshCurrentUser(): Promise<AuthUser | null> {
 // ---------------------------------------------------------------------------
 
 function readRequests(): InsuranceRequest[] {
-  return readJSON<InsuranceRequest[]>(REQUESTS_KEY, []);
+  const list = readJSON<InsuranceRequest[]>(REQUESTS_KEY, []);
+  // Migration: older requests stored single registration/emirates fields.
+  return list.map((r) => {
+    const img = r.images as InsuranceRequest["images"] & { registration?: string; emirates?: string };
+    if (img.registration && !img.registrationFront) {
+      img.registrationFront = img.registration;
+      img.registrationBack = img.registrationBack ?? "";
+    }
+    if (img.emirates && !img.emiratesFront) {
+      img.emiratesFront = img.emirates;
+      img.emiratesBack = img.emiratesBack ?? "";
+    }
+    if (!img.vehiclePhotos) img.vehiclePhotos = [];
+    return r;
+  });
 }
 
 function writeRequests(list: InsuranceRequest[]) {

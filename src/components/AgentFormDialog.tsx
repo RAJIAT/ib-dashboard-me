@@ -102,6 +102,19 @@ export function AgentFormDialog({
             />
           </Field>
 
+          {!lockedRole && mode === "create" && (
+            <Field label={t.agents.role}>
+              <select
+                value={values.role}
+                onChange={(e) => setValues((v) => ({ ...v, role: e.target.value as AgentRole }))}
+                className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground"
+              >
+                <option value="agent">{t.agents.roleAgent}</option>
+                <option value="supervisor">{t.agents.roleSupervisor}</option>
+              </select>
+            </Field>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t.agents.email}>
               <input

@@ -27,7 +27,132 @@ const HOP_BY_HOP = new Set([
   "content-length",
 ]);
 
+type DirectusJson<T = any> = { data?: T } & Record<string, any>;
+type MaintenanceState = { done: boolean; promise: Promise<void> | null; lastFailure: number };
+
+const maintenanceState: MaintenanceState = ((globalThis as any).__aibDirectusMaintenance ??= {
+  done: false,
+  promise: null,
+  lastFailure: 0,
+});
+
+async function adminDx<T = any>(path: string, init: RequestInit = {}): Promise<DirectusJson<T>> {
+  const token = process.env.DIRECTUS_ADMIN_TOKEN;
+  if (!token) throw new Error("DIRECTUS_ADMIN_TOKEN not configured");
+
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${token}`);
+  if (!headers.has("Content-Type") && !(init.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(`${DIRECTUS_TARGET}${path}`, { ...init, headers });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${response.status} ${path}: ${text.slice(0, 200)}`);
+  return text ? JSON.parse(text) : {};
+}
+
+function policyForRole(policies: any[], roleId: string | null) {
+  if (roleId === null) {
+    return policies.find((policy) => policy.name?.toLowerCase().includes("public")) ?? null;
+  }
+  return (
+    policies.find(
+      (policy) =>
+        Array.isArray(policy.roles) &&
+        policy.roles.some((role: any) => (typeof role === "string" ? role === roleId : role?.role === roleId)),
+    ) ?? null
+  );
+}
+
+async function ensurePermission(policyId: string, collection: string, action: string, fields: string | string[] = "*") {
+  const existing = await adminDx<any[]>(
+    `/permissions?filter[policy][_eq]=${policyId}&filter[collection][_eq]=${collection}&filter[action][_eq]=${action}&limit=1`,
+  );
+  if (existing.data?.length) return;
+
+  await adminDx("/permissions", {
+    method: "POST",
+    body: JSON.stringify({
+      policy: policyId,
+      collection,
+      action,
+      fields,
+      permissions: {},
+      validation: {},
+      presets: null,
+    }),
+  });
+}
+
+async function runDirectusMaintenance() {
+  const token = process.env.DIRECTUS_ADMIN_TOKEN;
+  if (!token) return;
+
+  const [collections, roles, policies] = await Promise.all([
+    adminDx<any[]>("/collections?limit=-1"),
+    adminDx<any[]>("/roles?fields=id,name"),
+    adminDx<any[]>("/policies?fields=id,name,roles"),
+  ]);
+
+  const collectionNames = new Set((collections.data ?? []).map((collection: any) => collection.collection));
+  const agentRole = (roles.data ?? []).find((role: any) => role.name === "Agent");
+  const agentPolicy = agentRole ? policyForRole(policies.data ?? [], agentRole.id) : null;
+
+  if (agentPolicy) {
+    if (collectionNames.has("audit_log")) await ensurePermission(agentPolicy.id, "audit_log", "create");
+    if (collectionNames.has("request_missing_attachments")) {
+      await ensurePermission(agentPolicy.id, "request_missing_attachments", "read");
+      await ensurePermission(agentPolicy.id, "request_missing_attachments", "create");
+    }
+  }
+
+  const publicPolicy = policyForRole(policies.data ?? [], null);
+  if (publicPolicy && collectionNames.has("requests")) {
+    const publicReads = await adminDx<any[]>(
+      `/permissions?filter[policy][_eq]=${publicPolicy.id}&filter[collection][_eq]=requests&filter[action][_eq]=read`,
+    );
+    for (const permission of publicReads.data ?? []) {
+      await adminDx(`/permissions/${permission.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          fields: ["id", "status", "reference_number", "created_at", "updated_at"],
+          permissions: {},
+        }),
+      });
+    }
+  }
+
+  for (const legacyCollection of ["agents", "requests_files"]) {
+    if (collectionNames.has(legacyCollection)) {
+      await adminDx(`/collections/${legacyCollection}`, { method: "DELETE" });
+    }
+  }
+}
+
+async function ensureDirectusMaintenance() {
+  if (maintenanceState.done) return;
+  if (maintenanceState.promise) return maintenanceState.promise;
+  if (Date.now() - maintenanceState.lastFailure < 60_000) return;
+
+  maintenanceState.promise = runDirectusMaintenance()
+    .then(() => {
+      maintenanceState.done = true;
+    })
+    .catch((error) => {
+      maintenanceState.lastFailure = Date.now();
+      console.error("[directus-maintenance]", error);
+    })
+    .finally(() => {
+      maintenanceState.promise = null;
+    });
+
+  return maintenanceState.promise;
+}
+
 async function proxy(request: Request, splat: string) {
+  await ensureDirectusMaintenance();
+
   const url = new URL(request.url);
   const targetUrl = `${DIRECTUS_TARGET}/${splat}${url.search}`;
 

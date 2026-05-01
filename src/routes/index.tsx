@@ -1,12 +1,12 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
-import { Loader2, Check, ShieldCheck, User, Zap, LogIn } from "lucide-react";
+import { Loader2, Check, ShieldCheck, User, Zap, LogIn, Send, Clock, FileImage, IdCard, BadgeCheck, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo } from "@/components/Logo";
-import { UploadCard } from "@/components/UploadCard";
-import { MultiUploadCard } from "@/components/MultiUploadCard";
+import { DocumentRow } from "@/components/DocumentRow";
+import { OptionalDocsSection } from "@/components/OptionalDocsSection";
 import { useLang } from "@/i18n/LanguageProvider";
 import { submitUpload } from "@/services/api";
 

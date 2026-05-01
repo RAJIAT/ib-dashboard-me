@@ -78,7 +78,7 @@ export function DocumentRow({
   return (
     <div
       className={`flex items-center gap-3 rounded-2xl border bg-card p-3 shadow-card transition-all ${
-        hasFile ? "border-success/40" : "border-border"
+        hasFile ? "border-primary/40" : "border-border"
       }`}
     >
       <input ref={inputRef} type="file" multiple={multiple} accept={accept} className="hidden" onChange={handle} />
@@ -91,7 +91,7 @@ export function DocumentRow({
           <Icon className="h-6 w-6 text-primary" />
         )}
         {hasFile && (
-          <div className="absolute -bottom-0.5 -end-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-success text-background ring-2 ring-card">
+          <div className="absolute -bottom-0.5 -end-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-background ring-2 ring-card">
             <Check className="h-3 w-3" />
           </div>
         )}
@@ -101,7 +101,7 @@ export function DocumentRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-foreground">{label}</p>
         {hasFile ? (
-          <p className="text-[11px] font-medium text-success">
+          <p className="text-[11px] font-medium text-primary">
             {files.length > 1 ? `${files.length} ${t.upload.uploaded}` : t.upload.uploaded}
           </p>
         ) : required ? (
@@ -116,7 +116,7 @@ export function DocumentRow({
         type="button"
         onClick={() => inputRef.current?.click()}
         aria-label={t.upload.capture}
-        className="flex h-14 w-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl bg-success/10 text-success transition active:scale-95 hover:bg-success/15"
+        className="flex h-14 w-16 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl bg-primary/10 text-primary transition active:scale-95 hover:bg-primary/15"
       >
         <Camera className="h-5 w-5" />
         <span className="text-[9px] font-semibold leading-none">{t.upload.capture}</span>

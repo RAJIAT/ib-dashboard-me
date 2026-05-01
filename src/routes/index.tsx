@@ -354,7 +354,7 @@ function UploadPage() {
 function TrustBadge({ icon: Icon, title, sub }: { icon: typeof Clock; title: string; sub: string }) {
   return (
     <div className="flex flex-1 flex-col items-center gap-1 text-center">
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-success/10 text-success">
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
         <Icon className="h-4 w-4" />
       </div>
       <p className="text-[11px] font-bold text-foreground">{title}</p>

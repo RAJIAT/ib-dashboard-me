@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Lock, Loader2, X } from "lucide-react";
 import { useLang } from "@/i18n/LanguageProvider";
-import { listAgents, listBranches, type Agent, type AgentRole } from "@/services/api";
+import { getBranches, listAgents, listBranches, type Agent, type AgentRole } from "@/services/api";
 
 export type AgentFormValues = {
   name: string;
@@ -39,9 +39,13 @@ export function AgentFormDialog({
 
   const supervisors = useMemo(() => listAgents().filter((a) => a.role === "supervisor"), [open]);
 
+  const [branches, setBranches] = useState<string[]>(() => listBranches());
+
   useEffect(() => {
     if (!open) return;
     setError("");
+    // Refresh branches when dialog opens so the dropdown is never empty.
+    getBranches().then(() => setBranches(listBranches())).catch(() => {});
     setValues({
       name: initial?.name ?? "",
       email: initial?.email ?? "",
@@ -140,6 +144,11 @@ export function AgentFormDialog({
                 value={values.agentId}
                 onChange={(e) => setValues((v) => ({ ...v, agentId: e.target.value.toUpperCase() }))}
                 placeholder="A123"
+                name="agent-id-field"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
                 className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground disabled:opacity-60"
               />
             </Field>
@@ -153,7 +162,8 @@ export function AgentFormDialog({
                 disabled={!!lockedBranch}
                 className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground disabled:opacity-60"
               >
-                {listBranches().map((b) => <option key={b} value={b}>{b}</option>)}
+                {branches.length === 0 && <option value="">—</option>}
+                {branches.map((b) => <option key={b} value={b}>{b}</option>)}
               </select>
               {lockedBranch && (
                 <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">

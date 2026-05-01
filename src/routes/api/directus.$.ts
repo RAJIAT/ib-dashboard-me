@@ -220,6 +220,16 @@ async function runDirectusMaintenance() {
       await ensurePermission(agentPolicy.id, "request_missing_attachments", "read");
       await ensurePermission(agentPolicy.id, "request_missing_attachments", "create");
     }
+    if (collectionNames.has("requests")) {
+      // Agent can read only their own requests, but with full business fields.
+      await upsertPermission(
+        agentPolicy.id,
+        "requests",
+        "read",
+        REQUEST_READ_FIELDS,
+        { agent_id: { _eq: "$CURRENT_USER.agent_id" } },
+      );
+    }
   }
 
   const supervisorRole = (roles.data ?? []).find((role: any) => role.name === "Supervisor");
@@ -229,6 +239,24 @@ async function runDirectusMaintenance() {
     if (collectionNames.has("request_missing_attachments")) {
       await ensurePermission(supervisorPolicy.id, "request_missing_attachments", "read");
       await ensurePermission(supervisorPolicy.id, "request_missing_attachments", "create");
+    }
+    if (collectionNames.has("requests")) {
+      // Supervisor sees all requests in their branch (or everything if branch is empty).
+      await upsertPermission(
+        supervisorPolicy.id,
+        "requests",
+        "read",
+        REQUEST_READ_FIELDS,
+        {
+          _or: [
+            { branch: { _eq: "$CURRENT_USER.branch" } },
+            { _and: [
+              { branch: { _empty: true } },
+              { agent_id: { _empty: false } },
+            ] },
+          ],
+        },
+      );
     }
   }
 

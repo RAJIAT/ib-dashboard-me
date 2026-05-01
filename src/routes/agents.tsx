@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useLang } from "@/i18n/LanguageProvider";
 import {
   canDeleteAgents,
-  createAgent, deleteAgent, getAgents, getCurrentUser, refreshCurrentUser,
+  createAgent, deleteAgent, getAgents, getBranches, getCurrentUser, refreshCurrentUser,
   subscribeAgents, updateAgent, type Agent, type AgentRole, type AuthUser,
 } from "@/services/api";
 

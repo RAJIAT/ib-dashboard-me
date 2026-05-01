@@ -39,9 +39,13 @@ export function AgentFormDialog({
 
   const supervisors = useMemo(() => listAgents().filter((a) => a.role === "supervisor"), [open]);
 
+  const [branches, setBranches] = useState<string[]>(() => listBranches());
+
   useEffect(() => {
     if (!open) return;
     setError("");
+    // Refresh branches when dialog opens so the dropdown is never empty.
+    getBranches().then(() => setBranches(listBranches())).catch(() => {});
     setValues({
       name: initial?.name ?? "",
       email: initial?.email ?? "",

@@ -59,6 +59,7 @@ function AdminAgents() {
       if (!alive) return;
       if (!fresh || (fresh.role !== "admin" && fresh.role !== "supervisor")) { navigate({ to: "/login" }); return; }
       setUser(fresh);
+      getBranches().catch(() => {});
       refresh();
     });
     const off = subscribeAgents(refresh);

@@ -432,11 +432,13 @@ export type DxUser = {
   last_name?: string;
   agent_id?: string;
   branch?: string;
+  supervisor_id?: string | null;
   status: "active" | "suspended" | "invited" | "draft" | "archived";
   role?: { id: string; name: string };
 };
 
-const USER_FIELDS = "id,email,first_name,last_name,agent_id,branch,status,role.id,role.name";
+const USER_FIELDS =
+  "id,email,first_name,last_name,agent_id,branch,supervisor_id,status,role.id,role.name";
 
 /** Find a role's UUID by its display name (e.g. "Agent", "Admin"). */
 export async function dxFindRoleId(name: string): Promise<string | null> {
@@ -446,15 +448,27 @@ export async function dxFindRoleId(name: string): Promise<string | null> {
   return json.data?.[0]?.id ?? null;
 }
 
+/** List all users with role "Agent" OR "Supervisor". */
 export async function dxListAgents(): Promise<DxUser[]> {
-  // List all users with role "Agent". We resolve role id first to keep the query indexed.
-  const roleId = await dxFindRoleId("Agent");
+  const [agentRoleId, supervisorRoleId] = await Promise.all([
+    dxFindRoleId("Agent"),
+    dxFindRoleId("Supervisor"),
+  ]);
+  const roleIds = [agentRoleId, supervisorRoleId].filter(Boolean) as string[];
+
   const params = new URLSearchParams({
     fields: USER_FIELDS,
     sort: "first_name",
     limit: "500",
   });
-  if (roleId) params.set("filter[role][_eq]", roleId);
+  // If we resolved at least one role id, restrict the query to those.
+  // Otherwise fall back to listing every user (role names not yet present in Directus).
+  if (roleIds.length > 0) {
+    roleIds.forEach((id, idx) => {
+      params.append(`filter[_or][${idx}][role][_eq]`, id);
+    });
+  }
+
   const json = await dxFetch(`/users?${params.toString()}`);
   return json.data as DxUser[];
 }
@@ -466,9 +480,15 @@ export async function dxCreateAgent(input: {
   last_name?: string;
   agent_id: string;
   branch?: string;
+  role?: "agent" | "supervisor";
+  supervisor_id?: string | null;
 }): Promise<DxUser> {
-  const roleId = await dxFindRoleId("Agent");
-  if (!roleId) throw new Error('Role "Agent" not found in Directus. Create it first (see DIRECTUS_SETUP.md).');
+  const roleName = input.role === "supervisor" ? "Supervisor" : "Agent";
+  const roleId = await dxFindRoleId(roleName);
+  if (!roleId)
+    throw new Error(
+      `Role "${roleName}" not found in Directus. The role is created automatically by the maintenance step on first proxy call — try again in a moment.`,
+    );
   const json = await dxFetch("/users", {
     method: "POST",
     body: JSON.stringify({
@@ -478,6 +498,7 @@ export async function dxCreateAgent(input: {
       last_name: input.last_name ?? "",
       agent_id: input.agent_id,
       branch: input.branch ?? null,
+      supervisor_id: input.supervisor_id ?? null,
       role: roleId,
       status: "active",
     }),
@@ -486,16 +507,34 @@ export async function dxCreateAgent(input: {
 }
 
 export async function dxUpdateAgent(id: string, patch: Partial<{
+  email: string;
   first_name: string;
   last_name: string;
   agent_id: string;
   branch: string | null;
+  supervisor_id: string | null;
+  role: "agent" | "supervisor";
   status: DxUser["status"];
   password: string;
 }>): Promise<DxUser> {
+  const body: Record<string, unknown> = {};
+  if (patch.email !== undefined) body.email = patch.email;
+  if (patch.first_name !== undefined) body.first_name = patch.first_name;
+  if (patch.last_name !== undefined) body.last_name = patch.last_name;
+  if (patch.agent_id !== undefined) body.agent_id = patch.agent_id;
+  if (patch.branch !== undefined) body.branch = patch.branch;
+  if (patch.supervisor_id !== undefined) body.supervisor_id = patch.supervisor_id;
+  if (patch.status !== undefined) body.status = patch.status;
+  if (patch.password) body.password = patch.password;
+  if (patch.role !== undefined) {
+    const roleName = patch.role === "supervisor" ? "Supervisor" : "Agent";
+    const roleId = await dxFindRoleId(roleName);
+    if (!roleId) throw new Error(`Role "${roleName}" not found in Directus`);
+    body.role = roleId;
+  }
   const json = await dxFetch(`/users/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: JSON.stringify(patch),
+    body: JSON.stringify(body),
   });
   return json.data as DxUser;
 }

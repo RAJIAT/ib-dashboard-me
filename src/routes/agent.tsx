@@ -35,7 +35,7 @@ function AgentDashboard() {
     });
   }, [navigate]);
 
-  const { items, loading } = useRequestsLive({ agentId: user?.agentId });
+  const { items, loading } = useRequestsLive(user?.agentId ? { agentId: user.agentId } : undefined);
 
   const counts = useMemo(
     () => ({

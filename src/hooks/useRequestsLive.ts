@@ -11,6 +11,15 @@ export function useRequestsLive(opts?: { agentId?: string; branch?: string }) {
 
   useEffect(() => {
     let alive = true;
+    // If a filter object was provided but it has no agentId/branch, treat as
+    // "not ready yet" — never list ALL requests by accident from a dashboard
+    // that's supposed to be scoped to one agent or branch.
+    const wantsScoped = opts !== undefined;
+    const ready = !wantsScoped || !!agentId || !!branch;
+    if (!ready) {
+      setLoading(false);
+      return () => { alive = false; };
+    }
     const refresh = () => {
       const filter: { agentId?: string; branch?: string } = {};
       if (agentId) filter.agentId = agentId;
@@ -31,7 +40,7 @@ export function useRequestsLive(opts?: { agentId?: string; branch?: string }) {
     refresh();
     const unsub = subscribeRequests(refresh);
     return () => { alive = false; unsub(); };
-  }, [agentId, branch]);
+  }, [agentId, branch, opts]);
 
   return { items, loading };
 }

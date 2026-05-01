@@ -458,10 +458,30 @@ export async function submitUpload(input: {
     ? await uploadPrepared(input.optional.inspection)
     : null;
 
-  // Resolve agent's branch label from the cache (best-effort).
-  const agent = listAgents().find((a) => a.id === input.agentId || a.userId === input.agentId);
-  const branch = agent?.branch ?? "";
-  const agentName = agent?.name ?? input.agentId;
+  // Resolve agent's branch + display name. Try the local cache first (fast path
+  // for logged-in dashboards), then fall back to a server lookup so anonymous
+  // customers using a public agent link still tag the request correctly.
+  let agent = listAgents().find((a) => a.id === input.agentId || a.userId === input.agentId);
+  let branch = agent?.branch ?? "";
+  let agentName = agent?.name ?? "";
+  if (!branch || !agentName) {
+    try {
+      const res = await fetch(
+        `/api/public/resolve-agent?agent_id=${encodeURIComponent(input.agentId)}`,
+        { cache: "no-store" },
+      );
+      if (res.ok) {
+        const j = (await res.json()) as { found?: boolean; name?: string; branch?: string };
+        if (j.found) {
+          if (!agentName && j.name) agentName = j.name;
+          if (!branch && j.branch) branch = j.branch;
+        }
+      }
+    } catch (e) {
+      console.warn("agent resolve failed", e);
+    }
+  }
+  if (!agentName) agentName = input.agentId;
 
   const created = await dxCreateRequest({
     agent_id: input.agentId,

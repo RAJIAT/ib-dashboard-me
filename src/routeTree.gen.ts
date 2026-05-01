@@ -21,6 +21,7 @@ import { Route as RequestsIdRouteImport } from './routes/requests.$id'
 import { Route as RRequestIdRouteImport } from './routes/r.$requestId'
 import { Route as ApiRoleIdRouteImport } from './routes/api/role-id'
 import { Route as ApiDiagRouteImport } from './routes/api/diag'
+import { Route as ApiPublicResolveAgentRouteImport } from './routes/api/public/resolve-agent'
 import { Route as ApiPublicQaAuditRouteImport } from './routes/api/public/qa-audit'
 import { Route as ApiPublicDiagRouteImport } from './routes/api/public/diag'
 import { Route as ApiDirectusSplatRouteImport } from './routes/api/directus.$'
@@ -85,6 +86,11 @@ const ApiDiagRoute = ApiDiagRouteImport.update({
   path: '/api/diag',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicResolveAgentRoute = ApiPublicResolveAgentRouteImport.update({
+  id: '/api/public/resolve-agent',
+  path: '/api/public/resolve-agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicQaAuditRoute = ApiPublicQaAuditRouteImport.update({
   id: '/api/public/qa-audit',
   path: '/api/public/qa-audit',
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/api/directus/$': typeof ApiDirectusSplatRoute
   '/api/public/diag': typeof ApiPublicDiagRoute
   '/api/public/qa-audit': typeof ApiPublicQaAuditRoute
+  '/api/public/resolve-agent': typeof ApiPublicResolveAgentRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -134,6 +141,7 @@ export interface FileRoutesByTo {
   '/api/directus/$': typeof ApiDirectusSplatRoute
   '/api/public/diag': typeof ApiPublicDiagRoute
   '/api/public/qa-audit': typeof ApiPublicQaAuditRoute
+  '/api/public/resolve-agent': typeof ApiPublicResolveAgentRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -152,6 +160,7 @@ export interface FileRoutesById {
   '/api/directus/$': typeof ApiDirectusSplatRoute
   '/api/public/diag': typeof ApiPublicDiagRoute
   '/api/public/qa-audit': typeof ApiPublicQaAuditRoute
+  '/api/public/resolve-agent': typeof ApiPublicResolveAgentRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -171,6 +180,7 @@ export interface FileRouteTypes {
     | '/api/directus/$'
     | '/api/public/diag'
     | '/api/public/qa-audit'
+    | '/api/public/resolve-agent'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/api/directus/$'
     | '/api/public/diag'
     | '/api/public/qa-audit'
+    | '/api/public/resolve-agent'
   id:
     | '__root__'
     | '/'
@@ -205,6 +216,7 @@ export interface FileRouteTypes {
     | '/api/directus/$'
     | '/api/public/diag'
     | '/api/public/qa-audit'
+    | '/api/public/resolve-agent'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -223,6 +235,7 @@ export interface RootRouteChildren {
   ApiDirectusSplatRoute: typeof ApiDirectusSplatRoute
   ApiPublicDiagRoute: typeof ApiPublicDiagRoute
   ApiPublicQaAuditRoute: typeof ApiPublicQaAuditRoute
+  ApiPublicResolveAgentRoute: typeof ApiPublicResolveAgentRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -311,6 +324,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDiagRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/resolve-agent': {
+      id: '/api/public/resolve-agent'
+      path: '/api/public/resolve-agent'
+      fullPath: '/api/public/resolve-agent'
+      preLoaderRoute: typeof ApiPublicResolveAgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/qa-audit': {
       id: '/api/public/qa-audit'
       path: '/api/public/qa-audit'
@@ -351,6 +371,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDirectusSplatRoute: ApiDirectusSplatRoute,
   ApiPublicDiagRoute: ApiPublicDiagRoute,
   ApiPublicQaAuditRoute: ApiPublicQaAuditRoute,
+  ApiPublicResolveAgentRoute: ApiPublicResolveAgentRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

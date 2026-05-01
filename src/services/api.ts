@@ -455,7 +455,7 @@ export async function submitUpload(input: {
     uploadFirst(input.images.emirates),
   ]);
   const inspection = input.optional?.inspection
-    ? await dxUploadFile(input.optional.inspection)
+    ? await uploadPrepared(input.optional.inspection)
     : null;
 
   // Resolve agent's branch label from the cache (best-effort).
@@ -480,7 +480,7 @@ export async function submitUpload(input: {
   // Vehicle media (mixed images + videos).
   for (const f of input.images.vehicleMedia) {
     try {
-      const fileId = await dxUploadFile(f);
+      const fileId = await uploadPrepared(f);
       await dxCreateVehicleMedia({
         request: reqId,
         file: fileId,
@@ -492,7 +492,7 @@ export async function submitUpload(input: {
   // Free-form attachments.
   for (const f of input.images.attachments ?? []) {
     try {
-      const fileId = await dxUploadFile(f);
+      const fileId = await uploadPrepared(f);
       await dxCreateAttachment({
         request: reqId,
         file: fileId,
@@ -509,7 +509,7 @@ export async function submitUpload(input: {
   ];
   for (const f of extras) {
     try {
-      const fileId = await dxUploadFile(f);
+      const fileId = await uploadPrepared(f);
       await dxCreateAttachment({
         request: reqId,
         file: fileId,

@@ -21,6 +21,7 @@ import { Route as RequestsIdRouteImport } from './routes/requests.$id'
 import { Route as RRequestIdRouteImport } from './routes/r.$requestId'
 import { Route as ApiRoleIdRouteImport } from './routes/api/role-id'
 import { Route as ApiDiagRouteImport } from './routes/api/diag'
+import { Route as ApiPublicQaAuditRouteImport } from './routes/api/public/qa-audit'
 import { Route as ApiPublicDiagRouteImport } from './routes/api/public/diag'
 import { Route as ApiDirectusSplatRouteImport } from './routes/api/directus.$'
 
@@ -84,6 +85,11 @@ const ApiDiagRoute = ApiDiagRouteImport.update({
   path: '/api/diag',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicQaAuditRoute = ApiPublicQaAuditRouteImport.update({
+  id: '/api/public/qa-audit',
+  path: '/api/public/qa-audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicDiagRoute = ApiPublicDiagRouteImport.update({
   id: '/api/public/diag',
   path: '/api/public/diag',
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/requests/$id': typeof RequestsIdRoute
   '/api/directus/$': typeof ApiDirectusSplatRoute
   '/api/public/diag': typeof ApiPublicDiagRoute
+  '/api/public/qa-audit': typeof ApiPublicQaAuditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -126,6 +133,7 @@ export interface FileRoutesByTo {
   '/requests/$id': typeof RequestsIdRoute
   '/api/directus/$': typeof ApiDirectusSplatRoute
   '/api/public/diag': typeof ApiPublicDiagRoute
+  '/api/public/qa-audit': typeof ApiPublicQaAuditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -143,6 +151,7 @@ export interface FileRoutesById {
   '/requests/$id': typeof RequestsIdRoute
   '/api/directus/$': typeof ApiDirectusSplatRoute
   '/api/public/diag': typeof ApiPublicDiagRoute
+  '/api/public/qa-audit': typeof ApiPublicQaAuditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/requests/$id'
     | '/api/directus/$'
     | '/api/public/diag'
+    | '/api/public/qa-audit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/requests/$id'
     | '/api/directus/$'
     | '/api/public/diag'
+    | '/api/public/qa-audit'
   id:
     | '__root__'
     | '/'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/requests/$id'
     | '/api/directus/$'
     | '/api/public/diag'
+    | '/api/public/qa-audit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -210,6 +222,7 @@ export interface RootRouteChildren {
   RequestsIdRoute: typeof RequestsIdRoute
   ApiDirectusSplatRoute: typeof ApiDirectusSplatRoute
   ApiPublicDiagRoute: typeof ApiPublicDiagRoute
+  ApiPublicQaAuditRoute: typeof ApiPublicQaAuditRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -298,6 +311,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDiagRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/qa-audit': {
+      id: '/api/public/qa-audit'
+      path: '/api/public/qa-audit'
+      fullPath: '/api/public/qa-audit'
+      preLoaderRoute: typeof ApiPublicQaAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/diag': {
       id: '/api/public/diag'
       path: '/api/public/diag'
@@ -330,6 +350,7 @@ const rootRouteChildren: RootRouteChildren = {
   RequestsIdRoute: RequestsIdRoute,
   ApiDirectusSplatRoute: ApiDirectusSplatRoute,
   ApiPublicDiagRoute: ApiPublicDiagRoute,
+  ApiPublicQaAuditRoute: ApiPublicQaAuditRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

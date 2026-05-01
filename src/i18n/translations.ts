@@ -80,11 +80,6 @@ export const translations = {
       email: "البريد الإلكتروني",
       password: "كلمة المرور",
       submit: "دخول",
-      hint: "تجريبي: أي كلمة مرور تعمل",
-      quickFill: "تعبئة سريعة",
-      asAdmin: "كمسؤول",
-      asAgent: "كوكيل",
-      asSupervisor: "كمشرف",
       invalid: "بيانات الدخول غير صحيحة",
     },
     nav: {

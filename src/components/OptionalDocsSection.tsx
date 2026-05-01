@@ -1,4 +1,4 @@
-import { Car, ChevronDown, FileText, FolderOpen, Home, Plus } from "lucide-react";
+import { Car, ChevronDown, FileSearch, FolderOpen, Plus } from "lucide-react";
 import { useState } from "react";
 import { DocumentRow } from "@/components/DocumentRow";
 import { useLang } from "@/i18n/LanguageProvider";
@@ -6,46 +6,22 @@ import { useLang } from "@/i18n/LanguageProvider";
 type Props = {
   vehicleMedia: File[];
   setVehicleMedia: (f: File[]) => void;
-  ownership: File[];
-  setOwnership: (f: File[]) => void;
-  contract: File[];
-  setContract: (f: File[]) => void;
-  other: File[];
-  setOther: (f: File[]) => void;
+  inspection: File[];
+  setInspection: (f: File[]) => void;
+  attachments: File[];
+  setAttachments: (f: File[]) => void;
 };
-
-type Slot = { id: string; files: File[] };
 
 export function OptionalDocsSection({
   vehicleMedia,
   setVehicleMedia,
-  ownership,
-  setOwnership,
-  contract,
-  setContract,
-  other,
-  setOther,
+  inspection,
+  setInspection,
+  attachments,
+  setAttachments,
 }: Props) {
   const { t } = useLang();
   const [open, setOpen] = useState(false);
-  const [extraSlots, setExtraSlots] = useState<Slot[]>([]);
-
-  const updateExtra = (id: string, files: File[]) => {
-    setExtraSlots((prev) => prev.map((s) => (s.id === id ? { ...s, files } : s)));
-    // Sync flattened files into `other`
-    const flat = extraSlots.map((s) => (s.id === id ? files : s.files)).flat();
-    setOther([...flat]);
-  };
-
-  const removeExtra = (id: string) => {
-    const next = extraSlots.filter((s) => s.id !== id);
-    setExtraSlots(next);
-    setOther(next.flatMap((s) => s.files));
-  };
-
-  const addExtra = () => {
-    setExtraSlots((prev) => [...prev, { id: `extra-${Date.now()}`, files: [] }]);
-  };
 
   if (!open) {
     return (
@@ -91,41 +67,20 @@ export function OptionalDocsSection({
         allowVideo
       />
       <DocumentRow
-        icon={Home}
-        label={t.upload.optionalSection.ownership}
-        files={ownership}
-        onChange={setOwnership}
-        onRemoveRow={() => setOwnership([])}
+        icon={FileSearch}
+        label={t.upload.cards.inspection}
+        files={inspection}
+        onChange={setInspection}
+        onRemoveRow={() => setInspection([])}
       />
       <DocumentRow
-        icon={FileText}
-        label={t.upload.optionalSection.contract}
-        files={contract}
-        onChange={setContract}
-        onRemoveRow={() => setContract([])}
+        icon={FolderOpen}
+        label={t.upload.cards.attachments}
+        files={attachments}
+        onChange={setAttachments}
+        onRemoveRow={() => setAttachments([])}
         acceptAny
       />
-
-      {extraSlots.map((slot) => (
-        <DocumentRow
-          key={slot.id}
-          icon={FolderOpen}
-          label={t.upload.optionalSection.otherDoc}
-          files={slot.files}
-          onChange={(f) => updateExtra(slot.id, f)}
-          onRemoveRow={() => removeExtra(slot.id)}
-          acceptAny
-        />
-      ))}
-
-      <button
-        type="button"
-        onClick={addExtra}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-primary-soft/20 p-3 text-sm font-semibold text-primary transition hover:bg-primary-soft/40 active:scale-[0.99]"
-      >
-        <Plus className="h-4 w-4" />
-        {t.upload.optionalSection.addAnother}
-      </button>
     </div>
   );
 }

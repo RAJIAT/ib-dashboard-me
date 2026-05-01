@@ -3,7 +3,7 @@ import { Building2, LayoutDashboard, LogOut, Menu, ScrollText, Users, Wrench, X 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo } from "@/components/Logo";
-import { ChatWidget } from "@/components/ChatWidget";
+
 import { useLang } from "@/i18n/LanguageProvider";
 import { canManageAgents, getCurrentUser, logout, refreshCurrentUser, type Role } from "@/services/api";
 
@@ -116,7 +116,6 @@ export function DashboardShell({
           <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">{children}</main>
         </div>
       </div>
-      <ChatWidget />
     </div>
   );
 }

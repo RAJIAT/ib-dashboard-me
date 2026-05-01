@@ -7,12 +7,6 @@ export const translations = {
     dir: "rtl" as Dir,
     brand: "الراحة للوساطة التأمينية",
     langSwitch: "EN",
-    demo: {
-      banner: "نسخة تجريبية",
-      reset: "إعادة تعيين البيانات",
-      confirmReset: "سيتم حذف جميع الطلبات وإعادة تعيين البيانات. هل تريد المتابعة؟",
-      resetDone: "تمت إعادة تعيين البيانات",
-    },
     upload: {
       title: "ارفع مستنداتك خلال دقيقة",
       subtitle: "ارفع 3 صور فقط، والباقي علينا",
@@ -86,11 +80,6 @@ export const translations = {
       email: "البريد الإلكتروني",
       password: "كلمة المرور",
       submit: "دخول",
-      hint: "تجريبي: أي كلمة مرور تعمل",
-      quickFill: "تعبئة سريعة",
-      asAdmin: "كمسؤول",
-      asAgent: "كوكيل",
-      asSupervisor: "كمشرف",
       invalid: "بيانات الدخول غير صحيحة",
     },
     nav: {
@@ -323,12 +312,6 @@ export const translations = {
     dir: "ltr" as Dir,
     brand: "Al Raha Insurance Broker",
     langSwitch: "العربية",
-    demo: {
-      banner: "Demo Mode",
-      reset: "Reset demo data",
-      confirmReset: "All requests will be cleared and demo data will be reset. Continue?",
-      resetDone: "Demo data has been reset",
-    },
     upload: {
       title: "Upload your documents in under a minute",
       subtitle: "Upload 3 images only, we'll handle the rest",
@@ -402,11 +385,6 @@ export const translations = {
       email: "Email",
       password: "Password",
       submit: "Sign in",
-      hint: "Demo: any password works",
-      quickFill: "Quick fill",
-      asAdmin: "as Admin",
-      asAgent: "as Agent",
-      asSupervisor: "as Supervisor",
       invalid: "Invalid credentials",
     },
     nav: {

@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SuccessRouteImport } from './routes/success'
-import { Route as SetupDirectusRouteImport } from './routes/setup-directus'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as BranchesRouteImport } from './routes/branches'
 import { Route as AuditRouteImport } from './routes/audit'
@@ -26,11 +25,6 @@ import { Route as ApiDirectusSplatRouteImport } from './routes/api/directus.$'
 const SuccessRoute = SuccessRouteImport.update({
   id: '/success',
   path: '/success',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SetupDirectusRoute = SetupDirectusRouteImport.update({
-  id: '/setup-directus',
-  path: '/setup-directus',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -98,7 +92,6 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AuditRoute
   '/branches': typeof BranchesRoute
   '/login': typeof LoginRoute
-  '/setup-directus': typeof SetupDirectusRoute
   '/success': typeof SuccessRoute
   '/r/$requestId': typeof RRequestIdRoute
   '/requests/$id': typeof RequestsIdRoute
@@ -113,7 +106,6 @@ export interface FileRoutesByTo {
   '/audit': typeof AuditRoute
   '/branches': typeof BranchesRoute
   '/login': typeof LoginRoute
-  '/setup-directus': typeof SetupDirectusRoute
   '/success': typeof SuccessRoute
   '/r/$requestId': typeof RRequestIdRoute
   '/requests/$id': typeof RequestsIdRoute
@@ -129,7 +121,6 @@ export interface FileRoutesById {
   '/audit': typeof AuditRoute
   '/branches': typeof BranchesRoute
   '/login': typeof LoginRoute
-  '/setup-directus': typeof SetupDirectusRoute
   '/success': typeof SuccessRoute
   '/r/$requestId': typeof RRequestIdRoute
   '/requests/$id': typeof RequestsIdRoute
@@ -146,7 +137,6 @@ export interface FileRouteTypes {
     | '/audit'
     | '/branches'
     | '/login'
-    | '/setup-directus'
     | '/success'
     | '/r/$requestId'
     | '/requests/$id'
@@ -161,7 +151,6 @@ export interface FileRouteTypes {
     | '/audit'
     | '/branches'
     | '/login'
-    | '/setup-directus'
     | '/success'
     | '/r/$requestId'
     | '/requests/$id'
@@ -176,7 +165,6 @@ export interface FileRouteTypes {
     | '/audit'
     | '/branches'
     | '/login'
-    | '/setup-directus'
     | '/success'
     | '/r/$requestId'
     | '/requests/$id'
@@ -192,7 +180,6 @@ export interface RootRouteChildren {
   AuditRoute: typeof AuditRoute
   BranchesRoute: typeof BranchesRoute
   LoginRoute: typeof LoginRoute
-  SetupDirectusRoute: typeof SetupDirectusRoute
   SuccessRoute: typeof SuccessRoute
   RRequestIdRoute: typeof RRequestIdRoute
   RequestsIdRoute: typeof RequestsIdRoute
@@ -206,13 +193,6 @@ declare module '@tanstack/react-router' {
       path: '/success'
       fullPath: '/success'
       preLoaderRoute: typeof SuccessRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/setup-directus': {
-      id: '/setup-directus'
-      path: '/setup-directus'
-      fullPath: '/setup-directus'
-      preLoaderRoute: typeof SetupDirectusRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -304,7 +284,6 @@ const rootRouteChildren: RootRouteChildren = {
   AuditRoute: AuditRoute,
   BranchesRoute: BranchesRoute,
   LoginRoute: LoginRoute,
-  SetupDirectusRoute: SetupDirectusRoute,
   SuccessRoute: SuccessRoute,
   RRequestIdRoute: RRequestIdRoute,
   RequestsIdRoute: RequestsIdRoute,

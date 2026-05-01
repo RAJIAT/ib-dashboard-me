@@ -31,7 +31,7 @@ const HOP_BY_HOP = new Set([
 type DirectusJson<T = any> = { data?: T } & Record<string, any>;
 type MaintenanceState = { done: boolean; promise: Promise<void> | null; lastFailure: number };
 
-const maintenanceState: MaintenanceState = ((globalThis as any).__aibDirectusMaintenance ??= {
+const maintenanceState: MaintenanceState = ((globalThis as any).__aibDirectusMaintenance_v2 ??= {
   done: false,
   promise: null,
   lastFailure: 0,
@@ -85,6 +85,56 @@ async function ensurePermission(policyId: string, collection: string, action: st
     }),
   });
 }
+
+/**
+ * Create or update a permission row for (policy, collection, action) so that
+ * the listed fields and row filter are exactly what we want. Used to repair
+ * over-restrictive permissions that block the Agent/Supervisor dashboards.
+ */
+async function upsertPermission(
+  policyId: string,
+  collection: string,
+  action: string,
+  fields: string[],
+  permissions: Record<string, any> = {},
+) {
+  const existing = await adminDx<any[]>(
+    `/permissions?filter[policy][_eq]=${policyId}&filter[collection][_eq]=${collection}&filter[action][_eq]=${action}&limit=1`,
+  );
+  const body = {
+    policy: policyId,
+    collection,
+    action,
+    fields,
+    permissions,
+    validation: {},
+    presets: null,
+  };
+  if (existing.data?.length) {
+    const id = existing.data[0].id;
+    await adminDx(`/permissions/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  } else {
+    await adminDx("/permissions", { method: "POST", body: JSON.stringify(body) });
+  }
+}
+
+const REQUEST_READ_FIELDS = [
+  "id",
+  "status",
+  "agent_id",
+  "agent_name",
+  "branch",
+  "date_created",
+  "request_display_id",
+  "registration",
+  "license",
+  "emirates",
+  "passport",
+  "inspection",
+  "customer_name",
+  "customer_email",
+  "customer_phone",
+];
 
 async function ensureUsersField(field: string, definition: Record<string, any>) {
   try {
@@ -170,6 +220,16 @@ async function runDirectusMaintenance() {
       await ensurePermission(agentPolicy.id, "request_missing_attachments", "read");
       await ensurePermission(agentPolicy.id, "request_missing_attachments", "create");
     }
+    if (collectionNames.has("requests")) {
+      // Agent can read only their own requests, but with full business fields.
+      await upsertPermission(
+        agentPolicy.id,
+        "requests",
+        "read",
+        REQUEST_READ_FIELDS,
+        { agent_id: { _eq: "$CURRENT_USER.agent_id" } },
+      );
+    }
   }
 
   const supervisorRole = (roles.data ?? []).find((role: any) => role.name === "Supervisor");
@@ -179,6 +239,24 @@ async function runDirectusMaintenance() {
     if (collectionNames.has("request_missing_attachments")) {
       await ensurePermission(supervisorPolicy.id, "request_missing_attachments", "read");
       await ensurePermission(supervisorPolicy.id, "request_missing_attachments", "create");
+    }
+    if (collectionNames.has("requests")) {
+      // Supervisor sees all requests in their branch (or everything if branch is empty).
+      await upsertPermission(
+        supervisorPolicy.id,
+        "requests",
+        "read",
+        REQUEST_READ_FIELDS,
+        {
+          _or: [
+            { branch: { _eq: "$CURRENT_USER.branch" } },
+            { _and: [
+              { branch: { _empty: true } },
+              { agent_id: { _empty: false } },
+            ] },
+          ],
+        },
+      );
     }
   }
 

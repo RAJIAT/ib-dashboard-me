@@ -385,11 +385,6 @@ export const translations = {
       email: "Email",
       password: "Password",
       submit: "Sign in",
-      hint: "Demo: any password works",
-      quickFill: "Quick fill",
-      asAdmin: "as Admin",
-      asAgent: "as Agent",
-      asSupervisor: "as Supervisor",
       invalid: "Invalid credentials",
     },
     nav: {

@@ -30,10 +30,9 @@ function UploadPage() {
   const [license, setLicense] = useState<File[]>([]);
   // Optional documents
   const [vehicleMedia, setVehicleMedia] = useState<File[]>([]);
-  const [ownership, setOwnership] = useState<File[]>([]);
-  const [contract, setContract] = useState<File[]>([]);
+  const [inspectionFiles, setInspectionFiles] = useState<File[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
-  const [inspection] = useState<File | null>(null);
+  const inspection = inspectionFiles[0] ?? null;
 
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");

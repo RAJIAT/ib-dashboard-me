@@ -78,37 +78,7 @@ function LoginPage() {
             {t.auth.submit}
           </button>
 
-          <div className="pt-2">
-            <p className="mb-2 text-center text-xs font-semibold text-muted-foreground">{t.auth.quickFill}</p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => { setEmail("admin@aib.com"); setPassword("demo"); }}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface text-xs font-semibold text-foreground transition hover:bg-muted"
-              >
-                <Shield className="h-3.5 w-3.5" />
-                {t.auth.asAdmin}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail("supervisor@aib.com"); setPassword("demo"); }}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface text-xs font-semibold text-foreground transition hover:bg-muted"
-              >
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {t.auth.asSupervisor}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail("agent@aib.com"); setPassword("demo"); }}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface text-xs font-semibold text-foreground transition hover:bg-muted"
-              >
-                <User className="h-3.5 w-3.5" />
-                {t.auth.asAgent}
-              </button>
-            </div>
-          </div>
-
-          <p className="text-center text-xs text-muted-foreground">{t.auth.hint}</p>
+          {error && <p className="text-center text-xs text-destructive">{error}</p>}
         </form>
       </main>
     </div>

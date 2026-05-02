@@ -37,10 +37,9 @@ async function resolveActor(request: Request): Promise<Actor | null> {
   const auth = request.headers.get("authorization");
   if (!auth?.toLowerCase().startsWith("bearer ")) return null;
 
-  const response = await fetch(
-    `${DIRECTUS_TARGET}/users/me?fields=id,branch,role,role.name`,
-    { headers: { Authorization: auth } },
-  );
+  const response = await fetch(`${DIRECTUS_TARGET}/users/me?fields=id,branch,role`, {
+    headers: { Authorization: auth },
+  });
   if (!response.ok) return null;
 
   const json = (await response.json()) as { data?: { id?: string; branch?: string | null; role?: string | { name?: string } } };

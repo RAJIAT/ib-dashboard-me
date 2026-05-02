@@ -361,6 +361,32 @@ async function runDirectusMaintenance() {
         ],
       },
     );
+
+    // Security hardening: Supervisor MUST NOT create / update / delete users.
+    // Editing agents (role, password, etc.) is an admin-only operation.
+    for (const action of ["create", "update", "delete", "share"]) {
+      try {
+        const stale = await adminDx<any[]>(
+          `/permissions?filter[policy][_eq]=${supervisorPolicy.id}&filter[collection][_eq]=directus_users&filter[action][_eq]=${action}&limit=10`,
+        );
+        for (const row of stale.data ?? []) {
+          await adminDx(`/permissions/${row.id}`, { method: "DELETE" });
+        }
+      } catch (err) {
+        console.error(`[directus-maintenance] failed to strip supervisor users.${action}`, err);
+      }
+    }
+    // Supervisor must never delete requests either.
+    try {
+      const stale = await adminDx<any[]>(
+        `/permissions?filter[policy][_eq]=${supervisorPolicy.id}&filter[collection][_eq]=requests&filter[action][_eq]=delete&limit=10`,
+      );
+      for (const row of stale.data ?? []) {
+        await adminDx(`/permissions/${row.id}`, { method: "DELETE" });
+      }
+    } catch (err) {
+      console.error("[directus-maintenance] failed to strip supervisor requests.delete", err);
+    }
   }
 
   const publicPolicy = policyForRole(policies.data ?? [], null);
@@ -377,6 +403,28 @@ async function runDirectusMaintenance() {
         }),
       });
     }
+  }
+
+  // Dedupe duplicate permission rows on every policy / collection / action.
+  // The legacy maintenance scripts created the same row twice, which made the
+  // QA audit show "directus_files.create, directus_files.create".
+  try {
+    const allPerms = await adminDx<any[]>(
+      "/permissions?fields=id,policy,collection,action&limit=-1",
+    );
+    const seen = new Map<string, string>();
+    for (const row of allPerms.data ?? []) {
+      const key = `${row.policy}|${row.collection}|${row.action}`;
+      const existingId = seen.get(key);
+      if (existingId) {
+        // Keep the first one, delete the duplicate.
+        await adminDx(`/permissions/${row.id}`, { method: "DELETE" });
+      } else {
+        seen.set(key, row.id);
+      }
+    }
+  } catch (err) {
+    console.error("[directus-maintenance] failed to dedupe permissions", err);
   }
 
   for (const legacyCollection of ["agents", "requests_files"]) {

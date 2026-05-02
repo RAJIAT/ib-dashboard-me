@@ -269,6 +269,22 @@ async function runDirectusMaintenance() {
       USER_SELF_FIELDS,
       { id: { _eq: "$CURRENT_USER" } },
     );
+
+    // Security hardening: agents must NOT be able to update / delete /
+    // create users. Remove any stray write permissions left over from
+    // earlier configurations.
+    for (const action of ["update", "delete", "create", "share"]) {
+      try {
+        const stale = await adminDx<any[]>(
+          `/permissions?filter[policy][_eq]=${agentPolicy.id}&filter[collection][_eq]=directus_users&filter[action][_eq]=${action}&limit=10`,
+        );
+        for (const row of stale.data ?? []) {
+          await adminDx(`/permissions/${row.id}`, { method: "DELETE" });
+        }
+      } catch (err) {
+        console.error(`[directus-maintenance] failed to strip agent users.${action}`, err);
+      }
+    }
   }
 
   const supervisorRole = (roles.data ?? []).find((role: any) => role.name === "Supervisor");

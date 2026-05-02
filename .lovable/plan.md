@@ -1,133 +1,70 @@
-# تقرير QA شامل — End-to-End
+## المشكلتان المُكتشفتان
 
-**نطاق الاختبار:** `https://rahaib.rajiatiyah.com` (Production) + الكود المصدري + بيانات Directus الفعلية عبر `/api/public/qa-audit`.
+### 1) النواقص تأخّرت بالظهور
+صفحة تفاصيل الطلب `/requests/$id` لا تعمل polling. الـ`subscribeRequests` الموجود فيها هو مجرد `window.addEventListener` على نفس التبويب — لا يلتقط أي تغيير يحدث في متصفّح آخر (متصفّح العميل عند رفع النواقص). فالموظّف يرى التحديث فقط عند:
+- إعادة تحميل الصفحة يدوياً، أو
+- الرجوع لقائمة الطلبات (التي تعمل polling كل 4 ثواني) ثم العودة.
 
-**ملاحظة:** لم تتوفر كلمات مرور حسابات Reda / Raji / Admin، فلم أستطع تنفيذ تدفقات التسجيل الكاملة في الـ UI. مع ذلك، تم التحقق من سلوك الـ Backend والصلاحيات والـ RLS فعليًا عبر استدعاءات API مباشرة + قراءة كود الـ Proxy.
+### 2) الصور لا تظهر (placeholder فارغ + "File wasn't available on site")
+المشكلة في `ImgCard` ← `useAssetUrl` ← `resolveAssetUrl`:
+- ملفات الـ Directus تُحفظ كـ URL مباشر مثل `/api/directus/assets/<id>` (وليس بادئة `storage:`).
+- الشرط في `useAssetUrl` يقول: «إن لم يبدأ بـ `storage:` استخدم الـ URL كما هو دون جلب bearer».
+- النتيجة: الـ`<img src>` يضرب `/api/directus/assets/<id>` **بدون** Authorization header، فيرفضه Directus (403/redirect)، فيظهر placeholder فارغ. هذا يطابق ما تظهره أيقونة "🚫 File wasn't available on site" في لقطة الشاشة.
 
----
-
-## ✔ الأشياء الشغالة
-
-| البند | النتيجة |
-|---|---|
-| `/`, `/login`, `/admin`, `/agent`, `/audit`, `/requests/1` | كل الصفحات HTTP 200 وتُحمّل |
-| `/api/public/resolve-agent?agent_id=A21` | ✅ يرجع `{name:"رضا", branch:"AUH-MAIN"}` |
-| `resolve-agent` Validation | ✅ يرفض agent فارغ / محارف خاصة (400) |
-| **منع القراءة المجهولة** | ✅ `GET /items/requests`, `audit_log`, `request_notes`, `branches`, `users` كلها → **403** |
-| **منع UPDATE/DELETE المجهول** | ✅ `PATCH /items/requests/1` → 403، `DELETE` → 403 |
-| **منع POST audit_log المجهول** | ✅ → 403 |
-| Admin token enrichment لـ `audit_log` | ✅ كود الـ proxy يضخ `actor_id/name/role/branch` من `/users/me` |
-| Notes race fix (`?fields=*`) | ✅ مفعّل في الـ proxy |
-| Mixed-content / Direct Directus | ✅ `http://api.rajiatiyah.com:8055` غير قابل للوصول من المتصفح (403 من خارجه أيضًا) |
-| RBAC الأساسي | ✅ Admin / Supervisor / Agent منفصلون، لكل واحد policy خاص |
-| البيانات داخل Directus | ✅ `users`, `branches`, `requests` موجودة فعليًا — ليست وهمية |
+كذلك المرفقات تستخدم `<a href={a.url} download>` مباشرة على نفس URL غير المُصرّح، فعند الفتح تنزّل ملفاً فارغاً (0 KB كما في صورتك).
 
 ---
 
-## 🔴 المشاكل الحرجة (Production Blockers)
+## الخطة
 
-### 1. أي شخص يستطيع إنشاء طلب فارغ بالكامل
-`POST /api/directus/items/requests` بـ body `{}` يرجع **200** ويُنشئ صفًا في DB بكل الحقول `null`.
-**دليل عملي:** أنشأت للتو الطلب `#8` بدون أي بيانات إطلاقًا.
-**السبب:** الـ proxy يضخ `DIRECTUS_ADMIN_TOKEN` لأي POST مجهول على `items/requests` بدون أي validation.
+### A. تسريع ظهور النواقص (real-time من جهة العميل)
 
-### 2. أي شخص يستطيع انتحال `agent_id` غير موجود
-`POST /items/requests` مع `agent_id:"FAKE_AGENT_1"` ينجح. أنشأت 5 طلبات spam بـ agent_ids مزوّرة كلها بحالة 200.
-**التأثير:** سيول من الطلبات الوهمية، تشويش على الإحصائيات، عدم القدرة على المحاسبة.
+في `src/routes/requests.$id.tsx`:
+1. إضافة polling خفيف على تفاصيل الطلب (كل 4 ثواني) مع إيقافه عند `document.hidden` ثم استئنافه عند العودة، وإعادة فتش فورية على `visibilitychange`.
+2. مقارنة بـ"signature" (عدد الملاحظات + عدد المرفقات الناقصة + status) قبل `setReq` لتجنّب re-renders بدون داعٍ.
+3. الإبقاء على `subscribeRequests` للتحديث الفوري داخل نفس التبويب.
 
-### 3. رفع ملفات مجهول بدون أي قيود
-`POST /api/directus/files` بـ multipart يقبل **أي ملف، أي نوع، أي حجم، أي اسم** بدون ربطه بطلب. أنشأت ملف `test.txt` يتيمًا الآن في storage.
-**التأثير:** Storage abuse, malware upload, تكاليف تخزين غير محدودة.
+في `src/routes/api/public/reupload-submit.ts`:
+- تثبيت ترتيب التنفيذ: رفع كل الملفات → إنشاء صفوف `request_missing_attachments` → resolve كل ملاحظات `missing` المفتوحة → flip status إلى `processing`. (هو حالياً صحيح؛ نتأكد فقط من `await` على كل خطوة لمنع سباق سريع.)
 
-### 4. لا يوجد Rate Limiting على endpoints المجهولة
-نفّذت 5 طلبات إنشاء متوازية → كلها نجحت بدون أي throttling. أي bot يستطيع إنشاء آلاف الطلبات/دقيقة.
+### B. إصلاح عرض الصور والمرفقات
 
-### 5. صلاحيات مكررة في Public Customer Upload Policy
-qa-audit يكشف:
-```
-policy:Public Customer Upload:
-  DUPLICATES: ['directus_files.create', 'requests.create']
-```
-صفّان متطابقان لنفس الصلاحية — يدل على أن سكربتات الإصلاح السابقة لم تنظّف الصفوف القديمة.
+في `src/services/directus.ts`:
+- `isDirectusAssetUrl`: حالياً يقارن بـ `${DIRECTUS_URL}/assets/` فقط. نوسّعها لتقبل أي مسار يحتوي `/api/directus/assets/` (كل URLs الملفات تمرّ عبر هذا البروكسي بغضّ النظر عن الـ host).
+- `dxFetchAsset`: يقبل إمّا fileId خام أو URL كامل ويستخرج الـ id منه.
 
----
+في `src/services/api.ts → resolveAssetUrl`:
+- استخراج fileId عبر regex على `/assets/([^/?#]+)` يعمل أصلاً، لكنه لا يُستدعى لأن `isDirectusAssetUrl` يفشل. بعد الإصلاح أعلاه سيمرّ التدفّق بشكل صحيح ويُرجع `blob:` URL مع mime.
 
-## ⚠️ المشاكل المحتملة (تحتاج تحقق ميداني بكلمة مرور حقيقية)
+في `src/routes/requests.$id.tsx → ImgCard`:
+- يبقى كما هو — لكنه الآن سيستلم `blob:` URL صالح فيظهر الصورة.
 
-| البند | الوضع |
-|---|---|
-| Supervisor branch scoping | كود الإصلاح طُبّق سابقًا (filter `$CURRENT_USER.branch`) — لكن لم أتمكن من تأكيده بحساب حي. |
-| Cross-agent access (Agent A21 يرى طلب وكيل آخر) | RLS موجود في policy، لكن لا يمكنني تأكيد الـ UI بدون login. |
-| Audit log actor enrichment فعليًا | الكود صحيح، لكن لم أؤكد بـ POST من جلسة Agent حقيقية. |
-| Form submission من المتصفح بحقول ناقصة | الفورم فيه `required` HTML — لكن أي bot يتجاوزها مباشرة عبر API كما أثبت أعلاه. |
-| Login race condition (الحقل يفرغ) | لم يُختبر — يحتاج تجربة UI حية. |
+في قسم "Other attachments" و "Missing attachments":
+- استبدال `<a href={a.url} download>` بزر يستدعي helper `downloadAsset(a.url, a.name)` الذي:
+  1. يستخرج fileId من URL،
+  2. يستدعي `dxFetchAsset` (مع bearer)،
+  3. يستخدم `triggerDownload(blob, name)`.
+- إضافة معاينة inline للـ thumbnails في "Missing attachments" لما يكون `mime` صورة (كي يرى الموظّف ما رفعه العميل بدون تنزيل).
+
+### C. تحسين تجربة سريعة إضافية
+- إظهار toast «وصلت نواقص جديدة من العميل» إذا زاد عدد `missingAttachments` أثناء فتح الصفحة.
 
 ---
 
-## 🔧 المشاكل اللي لازم تنصلح فورًا
+## الملفات المتأثّرة
 
-### إصلاحات Backend (في `src/routes/api/directus.$.ts`)
+1. `src/services/directus.ts` — توسيع `isDirectusAssetUrl` + قبول URL كامل في `dxFetchAsset`.
+2. `src/services/api.ts` — لا تغيير منطقي، فقط التأكد من تمرير `dxFetchAsset` للـ fileId المستخرَج.
+3. `src/routes/requests.$id.tsx`:
+   - polling + signature
+   - helper `downloadAsset` يستخدم bearer
+   - استبدال روابط `<a download>` بأزرار
+   - thumbnails للصور في "Missing attachments"
+   - toast عند وصول نواقص جديدة
+4. `src/routes/api/public/reupload-submit.ts` — مراجعة ترتيب الـ awaits (لا تغيير وظيفي كبير متوقّع).
 
-1. **Server-side validation للطلبات المجهولة قبل ضخ admin token:**
-   - `POST /items/requests` (مجهول): يجب التحقق من
-     - `customer_name` غير فارغ، طول 2-100
-     - `customer_phone` أو `customer_email` على الأقل واحد منهما موجود وصالح
-     - `agent_id` موجود فعليًا في `directus_users` (lookup قبل الإدخال)
-     - رفض كل حقل خارج whitelist (status, agent_name تُحدَّد server-side فقط)
-     - تعيين `agent_name` و `branch` تلقائيًا من lookup الوكيل (ليس من الـ body)
-
-2. **حماية رفع الملفات المجهول:**
-   - `POST /files` (مجهول): يتطلب header `x-request-token` (token مؤقت يُولَّد عند بدء الفورم) أو رفض الطلب
-   - حد حجم الملف server-side (مثلاً 10MB)
-   - whitelist للأنواع (image/jpeg, image/png, image/webp, application/pdf فقط)
-   - رفض ملفات بدون امتداد معروف
-
-3. **Rate limiting** (in-memory Map بسيط على IP):
-   - resolve-agent: 30/دقيقة/IP
-   - items/requests POST: 5/ساعة/IP
-   - files POST: 20/ساعة/IP
-   - رد 429 عند التجاوز
-
-### إصلاحات قاعدة البيانات
-
-4. **حذف البيانات الملوّثة الناتجة عن هذا الاختبار:**
-   - حذف الطلبات #8, #9 + الـ 5 طلبات spam (ابحث عن `customer_name LIKE 'SPAM_%' OR customer_name = 'QA Test' OR customer_name IS NULL`)
-   - حذف الملف اليتيم `9bebd704-78e1-43a9-8e15-349b8d584cd3`
-
-5. **تنظيف صلاحيات Public Customer Upload المكررة** — حذف الصفوف المكررة في `directus_permissions` (التكرار يؤكد أن سكربت الـ maintenance لا يدمج، بل يضيف).
-
-### إصلاحات الـ Maintenance Script
-
-6. **في `runDirectusMaintenance`**: استخدام `upsertPermission` (الموجود أصلًا) بدل `ensurePermission` (الذي يتجاهل التكرار) عند إنشاء صلاحيات Public Customer Upload — وإضافة خطوة dedup صريحة عند بدء التشغيل.
-
----
-
-## ملخص التنفيذ المقترح (عند الموافقة)
-
-عند الانتقال لوضع البناء، ستُنفَّذ التغييرات بالترتيب:
-
-1. تعديل `src/routes/api/directus.$.ts`:
-   - دالة `validateAnonymousRequestBody(body)` تُفلتر الحقول، تتحقق من النوع/الطول، وتلغي ضخ admin token عند الفشل (400)
-   - دالة `lookupAgentOrFail(agent_id)` تستخدم `DIRECTUS_ADMIN_TOKEN` للتحقق من وجود الوكيل وحقن `agent_name` + `branch` server-side
-   - دالة `validateAnonymousFileUpload(request)` تتحقق من حجم/نوع الملف
-   - دالة بسيطة `rateLimit(key, limit, windowMs)` بـ Map داخلي
-
-2. سكربت dedup للصلاحيات المكررة + خطوة في `runDirectusMaintenance` لتنظيفها تلقائيًا في كل إقلاع.
-
-3. سكربت تنظيف لمرة واحدة لحذف الطلبات الملوّثة + الملف اليتيم.
-
-4. اختبار مكرر للسيناريوهات الحرجة بعد النشر للتأكد من أن:
-   - `POST /items/requests` بـ `{}` → 400
-   - `POST /items/requests` مع `agent_id:"FAKE"` → 400
-   - رفع ملف 50MB → 413
-   - 6 طلبات متتالية من نفس IP → الأخيرة 429
-
----
-
-## النتيجة النهائية
-
-النظام **ليس جاهزًا للإنتاج** بشكله الحالي. الـ RBAC للمستخدمين المسجّلين قوي ومحكَم، لكن **سطح الهجوم المجهول مكشوف بالكامل** عبر الـ proxy: أي شخص يستطيع إغراق DB بطلبات، تخزين ملفات عشوائية، وانتحال هويات الوكلاء.
-
-**المخاطرة:** ساعة واحدة من bot يكفي لتدمير integrity البيانات بالكامل وملء storage.
-
-هل توافق على تنفيذ الإصلاحات الست أعلاه؟
+## معايير القبول
+- بعد رفع العميل لملف من اللينك، يظهر الملف عند الموظّف خلال **≤4 ثوانٍ** بدون refresh يدوي.
+- صور الهوية/الرخصة/الملكية تظهر فعلياً داخل البطاقات (ليست بيضاء).
+- الضغط على زر التنزيل ينزّل الملف الفعلي (وليس 0 KB).
+- المرفقات الناقصة المرفوعة من العميل تظهر كـ thumbnails صور (لا روابط فقط).

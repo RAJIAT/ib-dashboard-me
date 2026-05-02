@@ -105,12 +105,53 @@ function RequestDetails() {
       if (!fresh) navigate({ to: "/login" });
     });
     let alive = true;
+    let lastSig = "";
+    let lastMissing = -1; // -1 = not yet known
     const refreshRequest = () => {
-      getRequest(id).then((r) => { if (alive) { setReq(r); setLoading(false); } });
+      getRequest(id).then((r) => {
+        if (!alive || !r) { if (alive) setLoading(false); return; }
+        const sig = reqSignature(r);
+        if (sig !== lastSig) {
+          // Notify the agent if the customer just uploaded missing items.
+          const newMissing = r.images.missingAttachments?.length ?? 0;
+          if (lastMissing >= 0 && newMissing > lastMissing) {
+            const added = newMissing - lastMissing;
+            toast.success(
+              lang === "ar"
+                ? `وصلت ${added} ${added === 1 ? "ملف" : "ملفات"} جديدة من العميل`
+                : `${added} new file${added === 1 ? "" : "s"} from the customer`,
+            );
+          }
+          lastMissing = newMissing;
+          lastSig = sig;
+          setReq(r);
+        } else if (lastMissing < 0) {
+          lastMissing = r.images.missingAttachments?.length ?? 0;
+        }
+        setLoading(false);
+      }).catch(() => { if (alive) setLoading(false); });
     };
     refreshRequest();
     const unsubscribe = subscribeRequests(refreshRequest);
-    return () => { alive = false; unsubscribe(); };
+
+    // Cross-browser refresh: customer uploads happen in another browser, so
+    // same-tab events never fire here. Poll every 4s while the tab is visible.
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const start = () => { if (intervalId === null) intervalId = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      refreshRequest();
+    }, 4000); };
+    const stop = () => { if (intervalId !== null) { clearInterval(intervalId); intervalId = null; } };
+    start();
+    const onVis = () => { if (typeof document !== "undefined" && !document.hidden) refreshRequest(); };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVis);
+
+    return () => {
+      alive = false;
+      unsubscribe();
+      stop();
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVis);
+    };
     // run once per id
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);

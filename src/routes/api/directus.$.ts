@@ -489,7 +489,7 @@ async function resolveActorFromAuth(authHeader: string | null): Promise<{
   if (!token) return null;
   try {
     const r = await fetch(
-      `${DIRECTUS_TARGET}/users/me?fields=id,first_name,last_name,email,branch,role.name`,
+      `${DIRECTUS_TARGET}/users/me?fields=id,first_name,last_name,email,branch,role.name,role`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     if (!r.ok) return null;
@@ -498,10 +498,32 @@ async function resolveActorFromAuth(authHeader: string | null): Promise<{
     if (!u?.id) return null;
     const name =
       [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || u.email || null;
+    // u.role can be either {name: "..."} (when allowed) or a raw uuid string
+    // (when the user's policy lacks read access to directus_roles — e.g. Agents).
+    let roleName: string | null = null;
+    if (u.role && typeof u.role === "object" && typeof u.role.name === "string") {
+      roleName = u.role.name;
+    } else if (typeof u.role === "string" && u.role.length > 0) {
+      // Fall back to admin lookup so audit_log.actor_role is never null.
+      const adminToken = process.env.DIRECTUS_ADMIN_TOKEN;
+      if (adminToken) {
+        try {
+          const rr = await fetch(`${DIRECTUS_TARGET}/roles/${u.role}?fields=name`, {
+            headers: { Authorization: `Bearer ${adminToken}` },
+          });
+          if (rr.ok) {
+            const rj = (await rr.json()) as { data?: { name?: string } };
+            roleName = rj.data?.name ?? null;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
     return {
       id: u.id,
       name,
-      role: u.role?.name ?? null,
+      role: roleName,
       branch: u.branch ?? null,
     };
   } catch {

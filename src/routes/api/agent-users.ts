@@ -218,7 +218,9 @@ export const Route = createFileRoute("/api/agent-users")({
           if (!body.email || !body.password || !body.first_name || !body.agent_id) {
             return jsonError(400, "Missing required agent fields");
           }
-          if (body.password.length < 6) return jsonError(400, "Password must be at least 6 characters");
+          if (body.password.length < 6) {
+            return jsonError(400, "Password must be at least 6 characters");
+          }
 
           const requestedRole = body.role === "supervisor" ? "supervisor" : "agent";
           if (actor.role === "supervisor" && requestedRole !== "agent") {
@@ -232,7 +234,10 @@ export const Route = createFileRoute("/api/agent-users")({
           if (actor.role === "supervisor") {
             if (!actor.branch) {
               console.warn("[agent-users] supervisor", actor.id, "has no branch set");
-              return jsonError(400, "Your account has no branch assigned. Ask an admin to set your branch first.");
+              return jsonError(
+                400,
+                "Your account has no branch assigned. Ask an admin to set your branch first.",
+              );
             }
             branch = actor.branch;
           } else {
@@ -257,9 +262,10 @@ export const Route = createFileRoute("/api/agent-users")({
           if (availableUserFields.has("agent_id")) userPayload.agent_id = body.agent_id;
           if (availableUserFields.has("branch")) userPayload.branch = branch;
           if (availableUserFields.has("supervisor_id")) {
-            userPayload.supervisor_id = requestedRole === "agent"
-              ? (body.supervisor_id ?? (actor.role === "supervisor" ? actor.id : null))
-              : null;
+            userPayload.supervisor_id =
+              requestedRole === "agent"
+                ? (body.supervisor_id ?? (actor.role === "supervisor" ? actor.id : null))
+                : null;
           }
 
           const created = await adminDx("/users", {
@@ -267,10 +273,16 @@ export const Route = createFileRoute("/api/agent-users")({
             body: JSON.stringify(userPayload),
           });
 
-          return Response.json({ ok: true, data: created.data }, { headers: { "cache-control": "no-store" } });
+          return Response.json(
+            { ok: true, data: created.data },
+            { headers: { "cache-control": "no-store" } },
+          );
         } catch (error) {
           console.error("[agent-users] create failed", error);
-          return jsonError(502, error instanceof Error ? error.message : "Agent creation failed on the server");
+          return jsonError(
+            502,
+            error instanceof Error ? error.message : "Agent creation failed on the server",
+          );
         }
       },
     },

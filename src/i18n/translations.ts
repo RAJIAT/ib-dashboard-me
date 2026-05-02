@@ -264,6 +264,7 @@ export const translations = {
       emptySupervisors: "لا يوجد مشرفون بعد. ابدأ بإضافة أول مشرف.",
       supervisorLabel: "السوبرفايزر المسؤول",
       supervisorAuto: "تلقائي حسب الفرع",
+      branchRequired: "اختيار الفرع مطلوب",
     },
     chat: {
       title: "المحادثات",
@@ -593,6 +594,7 @@ export const translations = {
       emptySupervisors: "No supervisors yet. Add your first supervisor to get started.",
       supervisorLabel: "Assigned supervisor",
       supervisorAuto: "Auto (by branch)",
+      branchRequired: "Branch is required",
     },
     chat: {
       title: "Chats",

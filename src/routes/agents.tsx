@@ -34,6 +34,10 @@ function AdminAgents() {
   const isAdmin = user?.role === "admin";
   const lockedBranch = isSupervisor ? user?.branch : undefined;
   const canDelete = canDeleteAgents(user);
+  const isSelf = (a: Agent) =>
+    !!user &&
+    ((a.userId && a.userId === user.id) ||
+      (!!a.email && !!user.email && a.email.toLowerCase() === user.email.toLowerCase()));
 
   // Supervisors can only see/manage agents in their own branch — never the
   // supervisors tab.

@@ -10,6 +10,76 @@
 const MAX_EDGE = 1800;
 const JPEG_QUALITY = 0.82;
 
+/** Upper limits enforced BEFORE any compression. */
+export const RAW_IMAGE_MAX_BYTES = 25 * 1024 * 1024; // 25MB raw image (will be compressed)
+export const DOC_MAX_BYTES = 10 * 1024 * 1024; // 10MB for PDF / Office
+export const VIDEO_MAX_BYTES = 50 * 1024 * 1024; // 50MB for video
+
+export const IMAGE_MIME_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+];
+
+export const DOC_MIME_TYPES = [
+  "application/pdf",
+];
+
+export function isImageFile(f: File): boolean {
+  return f.type.startsWith("image/") || /\.(jpe?g|png|heic|heif|webp)$/i.test(f.name);
+}
+
+export function isVideoFile(f: File): boolean {
+  return f.type.startsWith("video/");
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Validate a file's size/type. Returns null if OK, or an error key + the
+ * caller can format with formatFileSize() for user-facing messages.
+ */
+export type FileValidationError =
+  | { kind: "imageTooLarge"; size: number; max: number }
+  | { kind: "docTooLarge"; size: number; max: number }
+  | { kind: "videoTooLarge"; size: number; max: number }
+  | { kind: "badType" };
+
+export function validateUploadFile(
+  f: File,
+  opts: { allowVideo?: boolean; allowDocs?: boolean; acceptAny?: boolean } = {},
+): FileValidationError | null {
+  const { allowVideo, allowDocs = true, acceptAny } = opts;
+  if (isVideoFile(f)) {
+    if (!allowVideo) return { kind: "badType" };
+    if (f.size > VIDEO_MAX_BYTES) {
+      return { kind: "videoTooLarge", size: f.size, max: VIDEO_MAX_BYTES };
+    }
+    return null;
+  }
+  if (isImageFile(f)) {
+    if (f.size > RAW_IMAGE_MAX_BYTES) {
+      return { kind: "imageTooLarge", size: f.size, max: RAW_IMAGE_MAX_BYTES };
+    }
+    return null;
+  }
+  // Non-image, non-video
+  if (acceptAny || (allowDocs && DOC_MIME_TYPES.includes(f.type))) {
+    if (f.size > DOC_MAX_BYTES) {
+      return { kind: "docTooLarge", size: f.size, max: DOC_MAX_BYTES };
+    }
+    return null;
+  }
+  return { kind: "badType" };
+}
+
 export async function prepareForUpload(file: File): Promise<File> {
   // Skip videos and other non-image files.
   if (!file.type.startsWith("image/") && !/\.(jpe?g|png|heic|heif|webp)$/i.test(file.name)) {

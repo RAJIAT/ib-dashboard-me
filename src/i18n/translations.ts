@@ -249,6 +249,8 @@ export const translations = {
       empty: "لا يوجد وكلاء بعد. ابدأ بإضافة أول وكيل.",
       backToAdmin: "لوحة المدير",
       supervisorNoDelete: "ليس لديك صلاحية حذف الوكلاء. يمكن للمدير فقط القيام بذلك.",
+      selfNoDelete: "لا يمكنك حذف حسابك الخاص.",
+      selfNoSuspend: "لا يمكنك إيقاف حسابك الخاص.",
       branchLockedNotice: (branch: string) => `سيتم إنشاء الوكيل ضمن فرعك (${branch}) ولا يمكن تغيير الفرع. لتغيير الفرع، يرجى التواصل مع المدير.`,
       branchLockedHint: "الفرع مقفول حسب صلاحياتك",
       role: "الدور",

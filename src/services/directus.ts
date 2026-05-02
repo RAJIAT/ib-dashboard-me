@@ -150,6 +150,12 @@ export function dxLogout() { writeToken(null); }
 
 export function dxHasSession() { return !!readToken(); }
 
+/** Returns a valid (refreshed) access token for server-to-server endpoints
+ *  that need to verify the current Directus user. */
+export async function dxAccessToken(): Promise<string | null> {
+  return refreshIfNeeded();
+}
+
 // ---------- Files ----------
 export async function dxUploadFile(file: File): Promise<string> {
   const fd = new FormData();

@@ -288,6 +288,58 @@ export const Route = createFileRoute("/api/agent-users")({
           );
         }
       },
+      DELETE: async ({ request }) => {
+        try {
+          const actor = await resolveActor(request);
+          if (!actor) return jsonError(401, "Your session is invalid. Please sign in again.");
+          if (actor.role !== "admin" && actor.role !== "supervisor") {
+            return jsonError(403, "You are not allowed to delete agents");
+          }
+
+          const url = new URL(request.url);
+          const userId = (url.searchParams.get("id") ?? "").trim();
+          if (!userId || !/^[a-f0-9-]{36}$/i.test(userId)) {
+            return jsonError(400, "Invalid user id");
+          }
+          if (userId === actor.id) {
+            return jsonError(400, "You cannot delete your own account");
+          }
+
+          // Step 1: detach this user from any requests they created/own.
+          // The FK that blocks deletion is requests.user_created (and possibly
+          // user_updated). Setting them to null keeps the request rows intact
+          // but no longer references the user.
+          for (const field of ["user_created", "user_updated"]) {
+            try {
+              // Find all request IDs touched by this user, then null the field.
+              const found = await adminDx<Array<{ id: string }>>(
+                `/items/requests?filter[${field}][_eq]=${encodeURIComponent(userId)}&fields=id&limit=-1`,
+              );
+              const ids = (found.data ?? []).map((r) => r.id).filter(Boolean);
+              if (ids.length > 0) {
+                await adminDx(`/items/requests`, {
+                  method: "PATCH",
+                  body: JSON.stringify({ keys: ids, data: { [field]: null } }),
+                });
+                console.log(`[agent-users] detached ${ids.length} requests via ${field}`);
+              }
+            } catch (e) {
+              console.warn(`[agent-users] detach ${field} failed`, e);
+            }
+          }
+
+          // Step 2: delete the user.
+          await adminDx(`/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
+
+          return Response.json({ ok: true }, { headers: { "cache-control": "no-store" } });
+        } catch (error) {
+          console.error("[agent-users] delete failed", error);
+          return jsonError(
+            502,
+            error instanceof Error ? error.message : "Agent deletion failed on the server",
+          );
+        }
+      },
     },
   },
 });

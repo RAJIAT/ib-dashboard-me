@@ -40,7 +40,10 @@ async function resolveActor(request: Request): Promise<Actor | null> {
   const response = await fetch(`${DIRECTUS_TARGET}/users/me?fields=id`, {
     headers: { Authorization: auth },
   });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    console.warn("[agent-users] /users/me failed", response.status);
+    return null;
+  }
 
   const json = (await response.json()) as { data?: { id?: string } };
   const verified = json.data;
@@ -50,7 +53,7 @@ async function resolveActor(request: Request): Promise<Actor | null> {
   // to read role + branch. Supervisor policies can hide `role`/`branch` from
   // /users/me, which previously made valid supervisors look like agents here.
   const userResponse = await adminDx<{ id?: string; branch?: string | null; role?: string | { name?: string } }>(
-    `/users/${encodeURIComponent(verified.id)}?fields=id,branch,role`,
+    `/users/${encodeURIComponent(verified.id)}?fields=id,branch,role.name`,
   );
   const user = userResponse.data;
   if (!user?.id) return null;
@@ -63,6 +66,7 @@ async function resolveActor(request: Request): Promise<Actor | null> {
       ? "supervisor"
       : "agent";
 
+  console.log("[agent-users] resolved actor", { id: user.id, role, branch: user.branch ?? null, rawRoleName });
   return { id: user.id, role, branch: user.branch ?? null };
 }
 

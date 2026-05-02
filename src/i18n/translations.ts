@@ -578,6 +578,8 @@ export const translations = {
       empty: "No agents yet. Add your first agent to get started.",
       backToAdmin: "Admin Dashboard",
       supervisorNoDelete: "You don't have permission to delete agents. Only admins can do that.",
+      selfNoDelete: "You can't delete your own account.",
+      selfNoSuspend: "You can't suspend your own account.",
       branchLockedNotice: (branch: string) => `This agent will be created under your branch (${branch}). The branch field cannot be changed. To assign a different branch, please contact an admin.`,
       branchLockedHint: "Branch is locked by your permissions",
       role: "Role",

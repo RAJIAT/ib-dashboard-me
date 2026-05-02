@@ -683,7 +683,69 @@ function ImgCard({
   );
 }
 
-function NotesSection({
+/**
+ * Card for a missing-document file uploaded by the customer through the
+ * reupload link. Renders an inline thumbnail when the file is an image so
+ * the agent can see it without downloading, and falls back to a file icon
+ * for PDFs / other types. Always uses the bearer-aware download helper.
+ */
+function MissingAttachmentCard({
+  name, sizeKb, type, url, onZoom,
+}: {
+  name: string;
+  sizeKb: number;
+  type: string;
+  url: string;
+  onZoom: (u: string, mime: string, filename: string) => void;
+}) {
+  const { src, mime, loading } = useAssetUrl(url);
+  const isImage = !!src && (mime.startsWith("image/") || (!mime && /\.(jpe?g|png|gif|webp|heic)$/i.test(name)));
+  const isPdf = mime === "application/pdf" || isPdfDataUrl(src) || /\.pdf$/i.test(name);
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-warning/30 bg-warning/5 shadow-soft">
+      <button
+        type="button"
+        onClick={() => src && onZoom(src, mime, name.replace(/\.[^.]+$/, "") || "file")}
+        className="block w-full text-start"
+        aria-label={name}
+      >
+        <div className="aspect-[4/3] w-full overflow-hidden bg-warning/10">
+          {isImage ? (
+            <img src={src} alt={name} className="h-full w-full object-cover" />
+          ) : isPdf ? (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-warning-foreground">
+              <FileText className="h-10 w-10" />
+              <span className="text-[11px] font-semibold">PDF</span>
+            </div>
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-warning-foreground">
+              {loading ? "…" : <FileText className="h-10 w-10" />}
+            </div>
+          )}
+        </div>
+      </button>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-semibold text-foreground" title={name}>{name}</div>
+          <div className="text-[10px] text-muted-foreground">
+            {sizeKb > 0 ? `${(sizeKb / 1024).toFixed(0)} KB · ` : ""}{type || mime || "file"}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); downloadAsset(url, name); }}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-foreground shadow-soft transition hover:bg-muted"
+          aria-label="download"
+        >
+          <Download className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
   req,
   onUpdated,
 }: {

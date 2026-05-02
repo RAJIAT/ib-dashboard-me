@@ -95,7 +95,12 @@ export const Route = createFileRoute("/api/agent-users")({
       POST: async ({ request }) => {
         try {
           const actor = await resolveActor(request);
-          if (!actor || (actor.role !== "admin" && actor.role !== "supervisor")) {
+          if (!actor) {
+            console.warn("[agent-users] no actor resolved from token");
+            return jsonError(401, "Your session is invalid. Please sign in again.");
+          }
+          if (actor.role !== "admin" && actor.role !== "supervisor") {
+            console.warn("[agent-users] actor role not allowed:", actor.role);
             return jsonError(403, "You are not allowed to create agents");
           }
 
@@ -120,12 +125,25 @@ export const Route = createFileRoute("/api/agent-users")({
             return jsonError(403, "Supervisors can only create agents");
           }
 
+          // Branch resolution:
+          //  - Supervisors: forced to their own branch (must exist on their account)
+          //  - Admins: must explicitly choose a branch for both agents and supervisors
+          let branch: string | null;
+          if (actor.role === "supervisor") {
+            if (!actor.branch) {
+              console.warn("[agent-users] supervisor", actor.id, "has no branch set");
+              return jsonError(400, "Your account has no branch assigned. Ask an admin to set your branch first.");
+            }
+            branch = actor.branch;
+          } else {
+            branch = body.branch ?? null;
+            if (!branch) {
+              return jsonError(400, "Branch is required");
+            }
+          }
+
           const roleName = requestedRole === "supervisor" ? "Supervisor" : "Agent";
           const roleId = await ensureRole(roleName);
-          const branch = actor.role === "supervisor" ? actor.branch : (body.branch ?? null);
-          if (actor.role === "supervisor" && !branch) {
-            return jsonError(400, "Supervisor branch is missing");
-          }
 
           const created = await adminDx("/users", {
             method: "POST",
@@ -145,7 +163,7 @@ export const Route = createFileRoute("/api/agent-users")({
           return Response.json({ ok: true, data: created.data }, { headers: { "cache-control": "no-store" } });
         } catch (error) {
           console.error("[agent-users] create failed", error);
-          return jsonError(502, "Agent creation failed on the server");
+          return jsonError(502, error instanceof Error ? error.message : "Agent creation failed on the server");
         }
       },
     },

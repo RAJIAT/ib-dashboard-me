@@ -602,15 +602,33 @@ function useAssetUrl(url: string): { src: string; mime: string; loading: boolean
 
   useEffect(() => {
     if (!url) { setSrc(""); setMime(""); return; }
-    if (!url.startsWith("storage:")) {
-      setSrc(url);
-      setMime(url.startsWith("data:application/pdf") ? "application/pdf" : "");
-      return;
+    // Anything that needs an Authorization header to fetch (Directus assets
+    // proxied through /api/directus/assets/<id> OR the legacy storage://
+    // pointer used by the old localStorage demo) must go through
+    // resolveAssetUrl, which fetches with the bearer and returns a blob: URL.
+    if (url.startsWith("storage:") || isDirectusAssetUrl(url)) {
+      let cancelled = false;
+      let lastBlob = "";
+      setLoading(true);
+      resolveAssetUrl(url)
+        .then((res) => {
+          if (cancelled) {
+            if (res.url.startsWith("blob:")) URL.revokeObjectURL(res.url);
+            return;
+          }
+          lastBlob = res.url.startsWith("blob:") ? res.url : "";
+          setSrc(res.url);
+          setMime(res.mime);
+        })
+        .finally(() => { if (!cancelled) setLoading(false); });
+      return () => {
+        cancelled = true;
+        if (lastBlob) URL.revokeObjectURL(lastBlob);
+      };
     }
-    setLoading(true);
-    resolveAssetUrl(url)
-      .then((res) => { setSrc(res.url); setMime(res.mime); })
-      .finally(() => setLoading(false));
+    // data: URLs and plain http(s) URLs render directly.
+    setSrc(url);
+    setMime(url.startsWith("data:application/pdf") ? "application/pdf" : "");
   }, [url]);
 
   return { src, mime, loading };

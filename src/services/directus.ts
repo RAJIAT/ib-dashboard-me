@@ -344,7 +344,7 @@ export async function dxListNotes(requestId: string): Promise<DxNote[]> {
   // Try server-side endpoint first (uses admin token, immune to per-role
   // permission gaps on request_notes). Fall back to direct Directus read.
   try {
-    const token = getDxToken();
+    const token = await refreshIfNeeded();
     if (token) {
       const res = await fetch(
         `/api/notes?requestId=${encodeURIComponent(requestId)}`,

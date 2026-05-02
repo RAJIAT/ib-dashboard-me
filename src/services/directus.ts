@@ -82,7 +82,9 @@ export async function dxFetch(path: string, init: RequestInit = {}, opts?: { aut
   if (!headers.has("Content-Type") && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(`${DIRECTUS_URL}${path}`, { ...init, headers });
+  // Always bypass HTTP cache: dashboards rely on freshly-written rows being
+  // visible immediately after a POST/PATCH (notes, status changes, etc.).
+  const res = await fetch(`${DIRECTUS_URL}${path}`, { ...init, headers, cache: "no-store" });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     // Log the raw backend body to the console for debugging only — never

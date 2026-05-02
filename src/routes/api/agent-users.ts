@@ -192,6 +192,28 @@ function jsonError(status: number, error: string) {
   return Response.json({ ok: false, error }, { status });
 }
 
+async function detachSystemFiles(userId: string) {
+  for (const field of ["uploaded_by", "modified_by"]) {
+    try {
+      const found = await adminDx<Array<{ id: string }>>(
+        `/files?filter[${field}][_eq]=${encodeURIComponent(userId)}&fields=id&limit=-1`,
+      );
+      const ids = (found.data ?? []).map((file) => file.id).filter(Boolean);
+      for (const id of ids) {
+        await adminDx(`/files/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ [field]: null }),
+        });
+      }
+      if (ids.length > 0) {
+        console.log(`[agent-users] detached ${ids.length} files via ${field}`);
+      }
+    } catch (error) {
+      console.warn(`[agent-users] detach files.${field} failed`, error);
+    }
+  }
+}
+
 export const Route = createFileRoute("/api/agent-users")({
   server: {
     handlers: {
@@ -306,9 +328,12 @@ export const Route = createFileRoute("/api/agent-users")({
           }
 
           // Step 1: detach this user from any requests they created/own.
-          // The FK that blocks deletion is requests.user_created (and possibly
-          // user_updated). Setting them to null keeps the request rows intact
-          // but no longer references the user.
+          // The FKs that block deletion are Directus accountability fields like
+          // requests.user_created/user_updated and directus_files.uploaded_by.
+          // Setting them to null keeps the records/files intact but no longer
+          // references the user.
+          await detachSystemFiles(userId);
+
           for (const field of ["user_created", "user_updated"]) {
             try {
               // Find all request IDs touched by this user, then null the field.

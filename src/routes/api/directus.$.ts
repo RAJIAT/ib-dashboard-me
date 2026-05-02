@@ -31,7 +31,7 @@ const HOP_BY_HOP = new Set([
 type DirectusJson<T = any> = { data?: T } & Record<string, any>;
 type MaintenanceState = { done: boolean; promise: Promise<void> | null; lastFailure: number };
 
-const maintenanceState: MaintenanceState = ((globalThis as any).__aibDirectusMaintenance_v3 ??= {
+const maintenanceState: MaintenanceState = ((globalThis as any).__aibDirectusMaintenance_v4 ??= {
   done: false,
   promise: null,
   lastFailure: 0,
@@ -231,10 +231,25 @@ async function runDirectusMaintenance() {
   ];
 
   if (agentPolicy) {
-    if (collectionNames.has("audit_log")) await ensurePermission(agentPolicy.id, "audit_log", "create");
+    if (collectionNames.has("audit_log")) {
+      await ensurePermission(agentPolicy.id, "audit_log", "create");
+      await ensurePermission(agentPolicy.id, "audit_log", "read");
+    }
     if (collectionNames.has("request_missing_attachments")) {
       await ensurePermission(agentPolicy.id, "request_missing_attachments", "read");
       await ensurePermission(agentPolicy.id, "request_missing_attachments", "create");
+      await ensurePermission(agentPolicy.id, "request_missing_attachments", "update");
+    }
+    if (collectionNames.has("request_notes")) {
+      await ensurePermission(agentPolicy.id, "request_notes", "read");
+      await ensurePermission(agentPolicy.id, "request_notes", "create");
+      await ensurePermission(agentPolicy.id, "request_notes", "update");
+    }
+    if (collectionNames.has("request_attachments")) {
+      await ensurePermission(agentPolicy.id, "request_attachments", "read");
+    }
+    if (collectionNames.has("request_vehicle_media")) {
+      await ensurePermission(agentPolicy.id, "request_vehicle_media", "read");
     }
     if (collectionNames.has("requests")) {
       // Agent can read only their own requests, but with full business fields.
@@ -254,15 +269,46 @@ async function runDirectusMaintenance() {
       USER_SELF_FIELDS,
       { id: { _eq: "$CURRENT_USER" } },
     );
+
+    // Security hardening: agents must NOT be able to update / delete /
+    // create users. Remove any stray write permissions left over from
+    // earlier configurations.
+    for (const action of ["update", "delete", "create", "share"]) {
+      try {
+        const stale = await adminDx<any[]>(
+          `/permissions?filter[policy][_eq]=${agentPolicy.id}&filter[collection][_eq]=directus_users&filter[action][_eq]=${action}&limit=10`,
+        );
+        for (const row of stale.data ?? []) {
+          await adminDx(`/permissions/${row.id}`, { method: "DELETE" });
+        }
+      } catch (err) {
+        console.error(`[directus-maintenance] failed to strip agent users.${action}`, err);
+      }
+    }
   }
 
   const supervisorRole = (roles.data ?? []).find((role: any) => role.name === "Supervisor");
   const supervisorPolicy = supervisorRole ? policyForRole(policies.data ?? [], supervisorRole.id) : null;
   if (supervisorPolicy) {
-    if (collectionNames.has("audit_log")) await ensurePermission(supervisorPolicy.id, "audit_log", "create");
+    if (collectionNames.has("audit_log")) {
+      await ensurePermission(supervisorPolicy.id, "audit_log", "create");
+      await ensurePermission(supervisorPolicy.id, "audit_log", "read");
+    }
     if (collectionNames.has("request_missing_attachments")) {
       await ensurePermission(supervisorPolicy.id, "request_missing_attachments", "read");
       await ensurePermission(supervisorPolicy.id, "request_missing_attachments", "create");
+      await ensurePermission(supervisorPolicy.id, "request_missing_attachments", "update");
+    }
+    if (collectionNames.has("request_notes")) {
+      await ensurePermission(supervisorPolicy.id, "request_notes", "read");
+      await ensurePermission(supervisorPolicy.id, "request_notes", "create");
+      await ensurePermission(supervisorPolicy.id, "request_notes", "update");
+    }
+    if (collectionNames.has("request_attachments")) {
+      await ensurePermission(supervisorPolicy.id, "request_attachments", "read");
+    }
+    if (collectionNames.has("request_vehicle_media")) {
+      await ensurePermission(supervisorPolicy.id, "request_vehicle_media", "read");
     }
     if (collectionNames.has("requests")) {
       // Supervisor sees all requests in their branch (or everything if branch is empty).

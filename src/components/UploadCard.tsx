@@ -104,7 +104,7 @@ export function UploadCard({ label, file, onChange, optional }: Props) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/jpg,image/png,application/pdf"
+        accept="image/*,application/pdf,.heic,.heif"
         className="hidden"
         onChange={handle}
       />

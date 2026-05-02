@@ -441,25 +441,14 @@ function RequestDetails() {
               </h3>
               <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                 {req.images.missingAttachments.map((a, idx) => (
-                  <a
+                  <MissingAttachmentCard
                     key={idx}
-                    href={a.url}
-                    download={a.name}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/5 p-3 shadow-soft transition hover:bg-warning/10"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-warning/20 text-warning-foreground">
-                      <FileText className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-foreground" title={a.name}>{a.name}</div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {(a.size / 1024).toFixed(0)} KB · {a.type || "file"}
-                      </div>
-                    </div>
-                    <Download className="h-4 w-4 text-muted-foreground" />
-                  </a>
+                    name={a.name}
+                    sizeKb={a.size}
+                    type={a.type}
+                    url={a.url}
+                    onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }}
+                  />
                 ))}
               </div>
             </div>
@@ -471,13 +460,11 @@ function RequestDetails() {
               <h3 className="mb-3 text-sm font-bold text-foreground">{t.details.attachments}</h3>
               <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                 {req.images.attachments.map((a, idx) => (
-                  <a
+                  <button
                     key={idx}
-                    href={a.url}
-                    download={a.name}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-soft transition hover:bg-muted"
+                    type="button"
+                    onClick={() => downloadAsset(a.url, a.name)}
+                    className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-start shadow-soft transition hover:bg-muted"
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary">
                       <FileText className="h-5 w-5" />
@@ -485,11 +472,11 @@ function RequestDetails() {
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-foreground" title={a.name}>{a.name}</div>
                       <div className="text-[11px] text-muted-foreground">
-                        {(a.size / 1024).toFixed(0)} KB · {a.type || "file"}
+                        {a.size > 0 ? `${(a.size / 1024).toFixed(0)} KB · ` : ""}{a.type || "file"}
                       </div>
                     </div>
                     <Download className="h-4 w-4 text-muted-foreground" />
-                  </a>
+                  </button>
                 ))}
               </div>
             </div>

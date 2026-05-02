@@ -66,6 +66,10 @@ export function AgentFormDialog({
       setError(t.agents.fillAll);
       return;
     }
+    if (!values.branch || !values.branch.trim()) {
+      setError(t.agents.branchRequired ?? "Branch is required");
+      return;
+    }
     if (mode === "create" && values.password.length < 6) {
       setError(t.agents.passwordTooShort);
       return;

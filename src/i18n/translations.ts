@@ -60,10 +60,15 @@ export const translations = {
         phoneRequired: "رقم الهاتف مطلوب",
         phoneInvalid: "صيغة رقم الهاتف غير صحيحة",
         tooLarge: "حجم الملف كبير جدًا (الحد الأقصى 5MB)",
-        badType: "نوع الملف غير مدعوم. JPG, PNG, PDF فقط",
+        imageTooLarge: (sizeMB: string, maxMB: string) =>
+          `حجم الصورة كبير: ${sizeMB}MB. الحد الأقصى ${maxMB}MB`,
+        docTooLarge: (sizeMB: string, maxMB: string) =>
+          `حجم الملف كبير: ${sizeMB}MB. الحد الأقصى ${maxMB}MB`,
+        badType: "نوع الملف غير مدعوم. JPG, PNG, HEIC, PDF",
         someRejected: (n: number) => `تم تجاهل ${n} ملف بسبب الحجم أو النوع`,
         videoBadType: "يرجى اختيار ملف فيديو صالح",
-        videoTooLarge: "حجم الفيديو كبير جدًا (الحد الأقصى 50MB)",
+        videoTooLarge: (sizeMB: string, maxMB: string) =>
+          `حجم الفيديو كبير: ${sizeMB}MB. الحد الأقصى ${maxMB}MB`,
         minVehiclePhotos: "ارفع صورتين على الأقل للمركبة (واجهة وخلف)",
         missingDocs: (names: string) => `الرجاء رفع: ${names}`,
       },

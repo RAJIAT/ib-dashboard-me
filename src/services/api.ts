@@ -546,6 +546,23 @@ export async function submitUpload(input: {
 // Notes
 // ---------------------------------------------------------------------------
 
+async function notesApi(body: Record<string, unknown>): Promise<void> {
+  const token = await dxAccessToken();
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch("/api/notes", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({} as { ok?: boolean; error?: string }));
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.error || `notes ${res.status}`);
+  }
+}
+
 export async function addRequestNote(
   requestId: string,
   input: { text: string; kind: RequestNoteKind },
@@ -554,20 +571,31 @@ export async function addRequestNote(
   if (!me) throw new Error("Not authenticated");
   const row = await dxGetRequest(requestId);
   if (!row) throw new Error("Request not found");
-  await dxCreateNote({
-    request: String(row.id),
-    text: input.text.trim(),
-    kind: input.kind,
-    author_id: me.id,
-    author_name: me.name,
-    author_role: me.role,
-  });
-  // When the agent/admin requests a missing document, automatically flip the
-  // request to `reupload` so the dashboard reflects the new state and the
-  // customer link makes sense.
-  if (input.kind === "missing" && row.status !== "reupload") {
-    try { await dxUpdateRequestStatus(String(row.id), "reupload"); } catch (e) { console.error("status flip failed", e); }
+
+  // Prefer the server-side endpoint (uses admin token, no permission gaps).
+  // Fall back to a direct Directus write if the endpoint is unreachable.
+  try {
+    await notesApi({
+      action: "create",
+      requestId: String(row.id),
+      text: input.text.trim(),
+      kind: input.kind,
+    });
+  } catch (e) {
+    console.warn("[notes] server endpoint failed, falling back to direct write", e);
+    await dxCreateNote({
+      request: String(row.id),
+      text: input.text.trim(),
+      kind: input.kind,
+      author_id: me.id,
+      author_name: me.name,
+      author_role: me.role,
+    });
+    if (input.kind === "missing" && row.status !== "reupload") {
+      try { await dxUpdateRequestStatus(String(row.id), "reupload"); } catch (err) { console.error("status flip failed", err); }
+    }
   }
+
   const fresh = await getRequest(String(row.id));
   if (!fresh) throw new Error("Request not found");
   notifyChange();
@@ -580,7 +608,12 @@ export async function resolveRequestNote(
 ): Promise<InsuranceRequest> {
   const numericId = Number(noteId);
   if (Number.isFinite(numericId)) {
-    await dxResolveNote(numericId);
+    try {
+      await notesApi({ action: "resolve", noteId: numericId });
+    } catch (e) {
+      console.warn("[notes] resolve via endpoint failed, falling back", e);
+      try { await dxResolveNote(numericId); } catch (err) { console.error("resolve direct failed", err); }
+    }
   }
   const fresh = await getRequest(requestId);
   if (!fresh) throw new Error("Request not found");

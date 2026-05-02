@@ -37,13 +37,22 @@ async function resolveActor(request: Request): Promise<Actor | null> {
   const auth = request.headers.get("authorization");
   if (!auth?.toLowerCase().startsWith("bearer ")) return null;
 
-  const response = await fetch(`${DIRECTUS_TARGET}/users/me?fields=id,branch,role`, {
+  const response = await fetch(`${DIRECTUS_TARGET}/users/me?fields=id`, {
     headers: { Authorization: auth },
   });
   if (!response.ok) return null;
 
-  const json = (await response.json()) as { data?: { id?: string; branch?: string | null; role?: string | { name?: string } } };
-  const user = json.data;
+  const json = (await response.json()) as { data?: { id?: string } };
+  const verified = json.data;
+  if (!verified?.id) return null;
+
+  // After the bearer token proves the caller's identity, use the admin token
+  // to read role + branch. Supervisor policies can hide `role`/`branch` from
+  // /users/me, which previously made valid supervisors look like agents here.
+  const userResponse = await adminDx<{ id?: string; branch?: string | null; role?: string | { name?: string } }>(
+    `/users/${encodeURIComponent(verified.id)}?fields=id,branch,role`,
+  );
+  const user = userResponse.data;
   if (!user?.id) return null;
 
   const rawRoleName = typeof user.role === "object" ? user.role?.name : typeof user.role === "string" ? await roleNameFromId(user.role) : null;

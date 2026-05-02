@@ -718,6 +718,40 @@ async function proxy(request: Request, splat: string) {
     init.body = bodyBuffer;
   }
 
+  // -------------------------------------------------------------------
+  // Anonymous-flow validation (BEFORE forwarding to Directus with admin token)
+  // -------------------------------------------------------------------
+  // The admin token bypasses every Directus permission. We MUST validate any
+  // anonymous payload here, otherwise random callers can spam the DB or upload
+  // arbitrary files.
+  const isAnonAdminFallback =
+    !hasAuth && !!adminToken && shouldUseAdminFallback(splat, request.method);
+
+  if (isAnonAdminFallback && splat === "items/requests" && bodyBuffer) {
+    if (!(headers.get("content-type") || "").includes("application/json")) {
+      return jsonError(400, "Request body must be JSON");
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(new TextDecoder().decode(bodyBuffer));
+    } catch {
+      return jsonError(400, "Malformed JSON body");
+    }
+    const result = await validateAnonymousRequestBody(parsed);
+    if (!result.ok) return jsonError(400, result.error);
+    const newBody = JSON.stringify(result.body);
+    init.body = newBody;
+    headers.set("content-length", String(new TextEncoder().encode(newBody).byteLength));
+  }
+
+  if (isAnonAdminFallback && (splat === "files" || splat.startsWith("files/"))) {
+    const fileCheck = await validateAnonymousFileUpload(request, bodyBuffer);
+    if (!fileCheck.ok) return jsonError(fileCheck.status, fileCheck.error);
+    // Re-attach body buffer (formData() consumed in validator used a clone, but
+    // we kept bodyBuffer so init.body is still the raw bytes).
+    init.body = bodyBuffer;
+  }
+
   // Enrich audit_log POSTs with actor info from the caller's session so we
   // never persist rows with actor_id = null. Only applies to JSON bodies on
   // POST /items/audit_log; uploads / multipart are left untouched.

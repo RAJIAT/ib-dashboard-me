@@ -341,6 +341,23 @@ export type DxNote = {
 };
 
 export async function dxListNotes(requestId: string): Promise<DxNote[]> {
+  // Try server-side endpoint first (uses admin token, immune to per-role
+  // permission gaps on request_notes). Fall back to direct Directus read.
+  try {
+    const token = getDxToken();
+    if (token) {
+      const res = await fetch(
+        `/api/notes?requestId=${encodeURIComponent(requestId)}`,
+        { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
+      );
+      if (res.ok) {
+        const j = await res.json().catch(() => null);
+        if (j?.ok && Array.isArray(j.notes)) return j.notes as DxNote[];
+      }
+    }
+  } catch (e) {
+    console.warn("[notes] server list failed, falling back to direct read", e);
+  }
   const params = new URLSearchParams({
     fields: "id,request,text,kind,author_id,author_name,author_role,date_created,resolved_at",
     sort: "date_created",

@@ -60,10 +60,15 @@ export const translations = {
         phoneRequired: "رقم الهاتف مطلوب",
         phoneInvalid: "صيغة رقم الهاتف غير صحيحة",
         tooLarge: "حجم الملف كبير جدًا (الحد الأقصى 5MB)",
-        badType: "نوع الملف غير مدعوم. JPG, PNG, PDF فقط",
+        imageTooLarge: (sizeMB: string, maxMB: string) =>
+          `حجم الصورة كبير: ${sizeMB}MB. الحد الأقصى ${maxMB}MB`,
+        docTooLarge: (sizeMB: string, maxMB: string) =>
+          `حجم الملف كبير: ${sizeMB}MB. الحد الأقصى ${maxMB}MB`,
+        badType: "نوع الملف غير مدعوم. JPG, PNG, HEIC, PDF",
         someRejected: (n: number) => `تم تجاهل ${n} ملف بسبب الحجم أو النوع`,
         videoBadType: "يرجى اختيار ملف فيديو صالح",
-        videoTooLarge: "حجم الفيديو كبير جدًا (الحد الأقصى 50MB)",
+        videoTooLarge: (sizeMB: string, maxMB: string) =>
+          `حجم الفيديو كبير: ${sizeMB}MB. الحد الأقصى ${maxMB}MB`,
         minVehiclePhotos: "ارفع صورتين على الأقل للمركبة (واجهة وخلف)",
         missingDocs: (names: string) => `الرجاء رفع: ${names}`,
       },
@@ -382,10 +387,15 @@ export const translations = {
         phoneRequired: "Phone number is required",
         phoneInvalid: "Invalid phone number format",
         tooLarge: "File too large (max 5MB)",
-        badType: "Unsupported file type. JPG, PNG, PDF only",
+        imageTooLarge: (sizeMB: string, maxMB: string) =>
+          `Image too large: ${sizeMB}MB. Max ${maxMB}MB`,
+        docTooLarge: (sizeMB: string, maxMB: string) =>
+          `File too large: ${sizeMB}MB. Max ${maxMB}MB`,
+        badType: "Unsupported file type. JPG, PNG, HEIC, PDF",
         someRejected: (n: number) => `${n} file${n === 1 ? "" : "s"} skipped (size or type)`,
         videoBadType: "Please select a valid video file",
-        videoTooLarge: "Video too large (max 50MB)",
+        videoTooLarge: (sizeMB: string, maxMB: string) =>
+          `Video too large: ${sizeMB}MB. Max ${maxMB}MB`,
         minVehiclePhotos: "Upload at least 2 vehicle photos (front and back)",
         missingDocs: (names: string) => `Please upload: ${names}`,
       },

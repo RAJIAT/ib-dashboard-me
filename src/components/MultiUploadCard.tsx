@@ -2,6 +2,7 @@ import { Camera, FileText, Plus, Video, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLang } from "@/i18n/LanguageProvider";
+import { prepareForUpload, validateUploadFile, isImageFile } from "@/lib/imagePrep";
 
 type Props = {
   label: string;
@@ -18,10 +19,6 @@ type Props = {
   /** Allow any file type EXCEPT video (images, PDF, Office docs, etc.). */
   acceptAny?: boolean;
 };
-
-const IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5MB for images / PDF / docs
-const VIDEO_MAX_BYTES = 50 * 1024 * 1024; // 50MB for video
-const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
 
 export function MultiUploadCard({
   label,
@@ -52,29 +49,48 @@ export function MultiUploadCard({
 
   const open = () => inputRef.current?.click();
 
-  const isAllowed = (f: File) => {
-    if (acceptAny) {
-      // Any non-video file (images, PDF, Office docs, text, etc.)
-      if (f.type.startsWith("video/")) return false;
-      return f.size <= IMAGE_MAX_BYTES;
-    }
-    if (IMAGE_TYPES.includes(f.type)) return f.size <= IMAGE_MAX_BYTES;
-    if (allowVideo && f.type.startsWith("video/")) return f.size <= VIDEO_MAX_BYTES;
-    return false;
-  };
-
-  const handle = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handle = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const list = Array.from(e.target.files ?? []);
     e.target.value = "";
     if (list.length === 0) return;
 
     const valid: File[] = [];
+    let firstError: ReturnType<typeof validateUploadFile> | null = null;
     let rejected = 0;
-    for (const f of list) {
-      if (!isAllowed(f)) { rejected += 1; continue; }
+    for (const raw of list) {
+      const err = validateUploadFile(raw, { allowVideo, acceptAny });
+      if (err) {
+        if (!firstError) firstError = err;
+        rejected += 1;
+        continue;
+      }
+      // Compress images down before queueing
+      let f = raw;
+      if (isImageFile(raw) && !raw.type.startsWith("video/")) {
+        try { f = await prepareForUpload(raw); } catch { f = raw; }
+      }
       valid.push(f);
     }
-    if (rejected > 0) toast.error(t.upload.errors.someRejected(rejected));
+
+    if (rejected > 0 && firstError) {
+      const mb = (n: number) => (n / 1024 / 1024).toFixed(1);
+      const maxMb = (n: number) => (n / 1024 / 1024).toFixed(0);
+      switch (firstError.kind) {
+        case "imageTooLarge":
+          toast.error(t.upload.errors.imageTooLarge(mb(firstError.size), maxMb(firstError.max)));
+          break;
+        case "docTooLarge":
+          toast.error(t.upload.errors.docTooLarge(mb(firstError.size), maxMb(firstError.max)));
+          break;
+        case "videoTooLarge":
+          toast.error(t.upload.errors.videoTooLarge(mb(firstError.size), maxMb(firstError.max)));
+          break;
+        case "badType":
+        default:
+          toast.error(t.upload.errors.badType);
+      }
+      if (rejected > 1) toast.error(t.upload.errors.someRejected(rejected));
+    }
     if (valid.length === 0) return;
 
     const room = Math.max(0, max - files.length);
@@ -89,15 +105,15 @@ export function MultiUploadCard({
 
   const canAddMore = files.length < max;
   const acceptAttr = acceptAny
-    ? "image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.zip"
+    ? "image/*,application/pdf,.heic,.heif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.zip"
     : allowVideo
-      ? "image/jpeg,image/jpg,image/png,application/pdf,video/*"
-      : "image/jpeg,image/jpg,image/png,application/pdf";
+      ? "image/*,application/pdf,.heic,.heif,video/*"
+      : "image/*,application/pdf,.heic,.heif";
   const formatHint = acceptAny
-    ? "Images · PDF · Docs · ≤ 5MB"
+    ? "Images · PDF · Docs"
     : allowVideo
-      ? "JPG · PNG · PDF · MP4 / MOV (≤ 50MB)"
-      : "JPG · PNG · PDF · ≤ 5MB";
+      ? "JPG · PNG · HEIC · PDF · MP4 / MOV (≤ 50MB)"
+      : "JPG · PNG · HEIC · PDF";
   const counterTotal = Math.max(max, min);
   const counterCurrent = files.length;
   const showCounter = files.length > 0 || min > 0;

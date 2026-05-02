@@ -2,6 +2,7 @@ import { Camera, Check, RefreshCw, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLang } from "@/i18n/LanguageProvider";
+import { prepareForUpload, validateUploadFile, formatFileSize } from "@/lib/imagePrep";
 
 type Props = {
   label: string;
@@ -9,9 +10,6 @@ type Props = {
   onChange: (f: File | null) => void;
   optional?: boolean;
 };
-
-const MAX_BYTES = 5 * 1024 * 1024;
-const ALLOWED = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
 
 function formatBytes(b: number) {
   if (b < 1024) return `${b} B`;
@@ -33,20 +31,47 @@ export function UploadCard({ label, file, onChange, optional }: Props) {
 
   const open = () => inputRef.current?.click();
 
-  const handle = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0] ?? null;
+  const handle = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.files?.[0] ?? null;
     e.target.value = "";
 
-    if (!f) return;
+    if (!raw) return;
 
-    // Validation
-    if (!ALLOWED.includes(f.type)) {
-      toast.error(t.upload.errors.badType);
+    // Validation (raw file, before compression)
+    const err = validateUploadFile(raw, { allowDocs: true });
+    if (err) {
+      switch (err.kind) {
+        case "imageTooLarge":
+          toast.error(
+            t.upload.errors.imageTooLarge(
+              (err.size / 1024 / 1024).toFixed(1),
+              (err.max / 1024 / 1024).toFixed(0),
+            ),
+          );
+          break;
+        case "docTooLarge":
+          toast.error(
+            t.upload.errors.docTooLarge(
+              (err.size / 1024 / 1024).toFixed(1),
+              (err.max / 1024 / 1024).toFixed(0),
+            ),
+          );
+          break;
+        case "badType":
+        default:
+          toast.error(t.upload.errors.badType);
+      }
       return;
     }
-    if (f.size > MAX_BYTES) {
-      toast.error(t.upload.errors.tooLarge);
-      return;
+
+    // Compress images down before passing upstream
+    let f = raw;
+    if (raw.type.startsWith("image/") || /\.(heic|heif|webp|jpe?g|png)$/i.test(raw.name)) {
+      try {
+        f = await prepareForUpload(raw);
+      } catch {
+        f = raw;
+      }
     }
 
     onChange(f);
@@ -79,7 +104,7 @@ export function UploadCard({ label, file, onChange, optional }: Props) {
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/jpg,image/png,application/pdf"
+        accept="image/*,application/pdf,.heic,.heif"
         className="hidden"
         onChange={handle}
       />

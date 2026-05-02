@@ -19,7 +19,7 @@ class DirectusAdminError extends Error {
   }
 }
 
-async function adminDx<T = any>(path: string, init: RequestInit = {}): Promise<{ data?: T }> {
+async function adminDx<T = unknown>(path: string, init: RequestInit = {}): Promise<{ data?: T }> {
   const token = process.env.DIRECTUS_ADMIN_TOKEN;
   if (!token) throw new Error("Admin token is not configured");
 
@@ -35,7 +35,7 @@ async function adminDx<T = any>(path: string, init: RequestInit = {}): Promise<{
   return text ? JSON.parse(text) : {};
 }
 
-async function ensureUsersField(field: string, definition: Record<string, any>): Promise<boolean> {
+async function ensureUsersField(field: string, definition: Record<string, unknown>): Promise<boolean> {
   try {
     await adminDx(`/fields/directus_users/${field}`);
     return true;
@@ -59,7 +59,7 @@ async function ensureUsersField(field: string, definition: Record<string, any>):
 }
 
 async function ensureAgentUserFields(): Promise<Set<string>> {
-  const entries: Array<[string, Record<string, any>]> = [
+  const entries: Array<[string, Record<string, unknown>]> = [
     [
       "agent_id",
       {
@@ -90,7 +90,11 @@ async function ensureAgentUserFields(): Promise<Set<string>> {
           special: ["m2o"],
           options: { template: "{{first_name}} {{last_name}}" },
         },
-        schema: { is_nullable: true, foreign_key_table: "directus_users", foreign_key_column: "id" },
+        schema: {
+          is_nullable: true,
+          foreign_key_table: "directus_users",
+          foreign_key_column: "id",
+        },
       },
     ],
   ];

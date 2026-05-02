@@ -12,6 +12,42 @@ import {
   addRequestNote, resolveRequestNote, subscribeRequests,
   type AuthUser, type InsuranceRequest, type RequestStatus, type RequestNoteKind,
 } from "@/services/api";
+import { isDirectusAssetUrl } from "@/services/directus";
+
+// Build a stable signature of the parts of the request that can change while
+// an agent has the page open: notes count, missing-attachment count, status,
+// and attachment count. Used to skip useless re-renders during polling.
+function reqSignature(r: InsuranceRequest | null): string {
+  if (!r) return "";
+  const notes = r.notes?.length ?? 0;
+  const missing = r.images.missingAttachments?.length ?? 0;
+  const atts = r.images.attachments?.length ?? 0;
+  const veh = r.images.vehicleMedia?.length ?? 0;
+  return `${r.status}|n${notes}|m${missing}|a${atts}|v${veh}`;
+}
+
+// Download a Directus asset using the bearer token, then trigger a save dialog.
+// Falls back to opening the URL directly if it isn't a Directus asset.
+async function downloadAsset(url: string, filename: string): Promise<void> {
+  try {
+    const { url: blobUrl, mime } = await resolveAssetUrl(url);
+    if (!blobUrl) { window.open(url, "_blank"); return; }
+    if (blobUrl.startsWith("blob:") || blobUrl.startsWith("data:")) {
+      const blob = await (await fetch(blobUrl)).blob();
+      const ext = extFromMime(mime || blob.type);
+      const hasExt = /\.[A-Za-z0-9]{2,5}$/.test(filename);
+      triggerDownload(blob, hasExt ? filename : `${filename}.${ext}`);
+      if (blobUrl.startsWith("blob:")) {
+        // tiny delay so the browser starts the download before we revoke
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+      }
+    } else {
+      window.open(blobUrl, "_blank");
+    }
+  } catch {
+    toast.error("تعذّر تنزيل الملف");
+  }
+}
 
 export const Route = createFileRoute("/requests/$id")({
   component: RequestDetails,
@@ -69,12 +105,53 @@ function RequestDetails() {
       if (!fresh) navigate({ to: "/login" });
     });
     let alive = true;
+    let lastSig = "";
+    let lastMissing = -1; // -1 = not yet known
     const refreshRequest = () => {
-      getRequest(id).then((r) => { if (alive) { setReq(r); setLoading(false); } });
+      getRequest(id).then((r) => {
+        if (!alive || !r) { if (alive) setLoading(false); return; }
+        const sig = reqSignature(r);
+        if (sig !== lastSig) {
+          // Notify the agent if the customer just uploaded missing items.
+          const newMissing = r.images.missingAttachments?.length ?? 0;
+          if (lastMissing >= 0 && newMissing > lastMissing) {
+            const added = newMissing - lastMissing;
+            toast.success(
+              lang === "ar"
+                ? `وصلت ${added} ${added === 1 ? "ملف" : "ملفات"} جديدة من العميل`
+                : `${added} new file${added === 1 ? "" : "s"} from the customer`,
+            );
+          }
+          lastMissing = newMissing;
+          lastSig = sig;
+          setReq(r);
+        } else if (lastMissing < 0) {
+          lastMissing = r.images.missingAttachments?.length ?? 0;
+        }
+        setLoading(false);
+      }).catch(() => { if (alive) setLoading(false); });
     };
     refreshRequest();
     const unsubscribe = subscribeRequests(refreshRequest);
-    return () => { alive = false; unsubscribe(); };
+
+    // Cross-browser refresh: customer uploads happen in another browser, so
+    // same-tab events never fire here. Poll every 4s while the tab is visible.
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const start = () => { if (intervalId === null) intervalId = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      refreshRequest();
+    }, 4000); };
+    const stop = () => { if (intervalId !== null) { clearInterval(intervalId); intervalId = null; } };
+    start();
+    const onVis = () => { if (typeof document !== "undefined" && !document.hidden) refreshRequest(); };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVis);
+
+    return () => {
+      alive = false;
+      unsubscribe();
+      stop();
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVis);
+    };
     // run once per id
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -364,25 +441,14 @@ function RequestDetails() {
               </h3>
               <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                 {req.images.missingAttachments.map((a, idx) => (
-                  <a
+                  <MissingAttachmentCard
                     key={idx}
-                    href={a.url}
-                    download={a.name}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/5 p-3 shadow-soft transition hover:bg-warning/10"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-warning/20 text-warning-foreground">
-                      <FileText className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-foreground" title={a.name}>{a.name}</div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {(a.size / 1024).toFixed(0)} KB · {a.type || "file"}
-                      </div>
-                    </div>
-                    <Download className="h-4 w-4 text-muted-foreground" />
-                  </a>
+                    name={a.name}
+                    sizeKb={a.size}
+                    type={a.type}
+                    url={a.url}
+                    onZoom={(u, m, n) => { setZoom(u); setZoomMime(m); setZoomFilename(n); }}
+                  />
                 ))}
               </div>
             </div>
@@ -394,13 +460,11 @@ function RequestDetails() {
               <h3 className="mb-3 text-sm font-bold text-foreground">{t.details.attachments}</h3>
               <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                 {req.images.attachments.map((a, idx) => (
-                  <a
+                  <button
                     key={idx}
-                    href={a.url}
-                    download={a.name}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-soft transition hover:bg-muted"
+                    type="button"
+                    onClick={() => downloadAsset(a.url, a.name)}
+                    className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-start shadow-soft transition hover:bg-muted"
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary">
                       <FileText className="h-5 w-5" />
@@ -408,11 +472,11 @@ function RequestDetails() {
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-foreground" title={a.name}>{a.name}</div>
                       <div className="text-[11px] text-muted-foreground">
-                        {(a.size / 1024).toFixed(0)} KB · {a.type || "file"}
+                        {a.size > 0 ? `${(a.size / 1024).toFixed(0)} KB · ` : ""}{a.type || "file"}
                       </div>
                     </div>
                     <Download className="h-4 w-4 text-muted-foreground" />
-                  </a>
+                  </button>
                 ))}
               </div>
             </div>
@@ -525,15 +589,33 @@ function useAssetUrl(url: string): { src: string; mime: string; loading: boolean
 
   useEffect(() => {
     if (!url) { setSrc(""); setMime(""); return; }
-    if (!url.startsWith("storage:")) {
-      setSrc(url);
-      setMime(url.startsWith("data:application/pdf") ? "application/pdf" : "");
-      return;
+    // Anything that needs an Authorization header to fetch (Directus assets
+    // proxied through /api/directus/assets/<id> OR the legacy storage://
+    // pointer used by the old localStorage demo) must go through
+    // resolveAssetUrl, which fetches with the bearer and returns a blob: URL.
+    if (url.startsWith("storage:") || isDirectusAssetUrl(url)) {
+      let cancelled = false;
+      let lastBlob = "";
+      setLoading(true);
+      resolveAssetUrl(url)
+        .then((res) => {
+          if (cancelled) {
+            if (res.url.startsWith("blob:")) URL.revokeObjectURL(res.url);
+            return;
+          }
+          lastBlob = res.url.startsWith("blob:") ? res.url : "";
+          setSrc(res.url);
+          setMime(res.mime);
+        })
+        .finally(() => { if (!cancelled) setLoading(false); });
+      return () => {
+        cancelled = true;
+        if (lastBlob) URL.revokeObjectURL(lastBlob);
+      };
     }
-    setLoading(true);
-    resolveAssetUrl(url)
-      .then((res) => { setSrc(res.url); setMime(res.mime); })
-      .finally(() => setLoading(false));
+    // data: URLs and plain http(s) URLs render directly.
+    setSrc(url);
+    setMime(url.startsWith("data:application/pdf") ? "application/pdf" : "");
   }, [url]);
 
   return { src, mime, loading };
@@ -597,6 +679,68 @@ function ImgCard({
           <Download className="h-4 w-4" />
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Card for a missing-document file uploaded by the customer through the
+ * reupload link. Renders an inline thumbnail when the file is an image so
+ * the agent can see it without downloading, and falls back to a file icon
+ * for PDFs / other types. Always uses the bearer-aware download helper.
+ */
+function MissingAttachmentCard({
+  name, sizeKb, type, url, onZoom,
+}: {
+  name: string;
+  sizeKb: number;
+  type: string;
+  url: string;
+  onZoom: (u: string, mime: string, filename: string) => void;
+}) {
+  const { src, mime, loading } = useAssetUrl(url);
+  const isImage = !!src && (mime.startsWith("image/") || (!mime && /\.(jpe?g|png|gif|webp|heic)$/i.test(name)));
+  const isPdf = mime === "application/pdf" || isPdfDataUrl(src) || /\.pdf$/i.test(name);
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-warning/30 bg-warning/5 shadow-soft">
+      <button
+        type="button"
+        onClick={() => src && onZoom(src, mime, name.replace(/\.[^.]+$/, "") || "file")}
+        className="block w-full text-start"
+        aria-label={name}
+      >
+        <div className="aspect-[4/3] w-full overflow-hidden bg-warning/10">
+          {isImage ? (
+            <img src={src} alt={name} className="h-full w-full object-cover" />
+          ) : isPdf ? (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-warning-foreground">
+              <FileText className="h-10 w-10" />
+              <span className="text-[11px] font-semibold">PDF</span>
+            </div>
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-warning-foreground">
+              {loading ? "…" : <FileText className="h-10 w-10" />}
+            </div>
+          )}
+        </div>
+      </button>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-semibold text-foreground" title={name}>{name}</div>
+          <div className="text-[10px] text-muted-foreground">
+            {sizeKb > 0 ? `${(sizeKb / 1024).toFixed(0)} KB · ` : ""}{type || mime || "file"}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); downloadAsset(url, name); }}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-foreground shadow-soft transition hover:bg-muted"
+          aria-label="download"
+        >
+          <Download className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }

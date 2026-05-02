@@ -21,9 +21,20 @@ function LoginPage() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    // Read directly from the form fields too — autofill / very fast typing
+    // can momentarily desync React state with the DOM value (race), causing
+    // a spurious "Please fill out this field" or empty-credential submit.
+    const form = e.currentTarget as HTMLFormElement;
+    const fd = new FormData(form);
+    const finalEmail = (fd.get("email")?.toString() ?? email).trim();
+    const finalPassword = (fd.get("password")?.toString() ?? password).trim();
+    if (!finalEmail || !finalPassword) {
+      setError(t.auth.invalid);
+      return;
+    }
     setLoading(true);
     try {
-      const u = await login(email, password);
+      const u = await login(finalEmail, finalPassword);
       navigate({ to: u.role === "admin" || u.role === "supervisor" ? "/admin" : "/agent" });
     } catch {
       setError(t.auth.invalid);
@@ -50,7 +61,9 @@ function LoginPage() {
             <span className="mb-1.5 block text-sm font-medium text-foreground">{t.auth.email}</span>
             <input
               type="email"
+              name="email"
               required
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="h-12 w-full rounded-xl border border-input bg-surface px-4 text-foreground outline-none ring-primary focus:ring-2"
@@ -61,7 +74,9 @@ function LoginPage() {
             <span className="mb-1.5 block text-sm font-medium text-foreground">{t.auth.password}</span>
             <input
               type="password"
+              name="password"
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="h-12 w-full rounded-xl border border-input bg-surface px-4 text-foreground outline-none ring-primary focus:ring-2"

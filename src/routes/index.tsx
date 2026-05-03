@@ -133,7 +133,8 @@ function UploadPage() {
       setTimeout(() => navigate({ to: "/success", search: { id } }), 600);
     } catch (err) {
       console.error("Upload failed:", err);
-      toast.error("Upload failed. Please try again.");
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Upload failed: ${msg}`);
       setDone(false);
       setSubmitting(false);
     }

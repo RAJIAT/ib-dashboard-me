@@ -374,7 +374,16 @@ async function runDirectusMaintenance() {
       },
     );
 
-    // Security hardening: Supervisor MUST NOT create / update / delete users.
+    // Same fix as Agent: supervisors need to read file metadata after upload.
+    await ensurePermission(supervisorPolicy.id, "directus_files", "create");
+    await upsertPermission(
+      supervisorPolicy.id,
+      "directus_files",
+      "read",
+      ["id", "storage", "filename_disk", "filename_download", "title", "type", "filesize", "uploaded_by"],
+    );
+
+
     // Editing agents (role, password, etc.) is an admin-only operation.
     for (const action of ["create", "update", "delete", "share"]) {
       try {

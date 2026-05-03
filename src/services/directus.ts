@@ -95,13 +95,17 @@ export async function dxFetch(path: string, init: RequestInit = {}, opts?: { aut
   const res = await fetch(`${DIRECTUS_URL}${path}`, { ...init, headers, cache: "no-store" });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    // Log the raw backend body to the console for debugging only — never
-    // surface it to end users (it can leak collection names, constraint
-    // names, validation rule paths and other backend internals).
     if (typeof console !== "undefined") {
       console.error(`[directus] ${res.status} ${path}`, text);
     }
-    throw new Error(safeErrorMessage(res.status));
+    // Try to extract Directus-style error message for better UX (especially
+    // useful for the public upload form where the user has no console).
+    let detail = "";
+    try {
+      const j = JSON.parse(text);
+      detail = j?.errors?.[0]?.message || j?.error || "";
+    } catch { /* ignore */ }
+    throw new Error(detail || safeErrorMessage(res.status));
   }
   if (res.status === 204) return null;
   return res.json();

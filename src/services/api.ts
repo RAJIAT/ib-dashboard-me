@@ -10,10 +10,10 @@
 
 import {
   dxLogin, dxLogout, dxFetchMe, dxHasSession, isDirectusEnabled,
-  dxListRequests, dxGetRequest, dxCreateRequest, dxUpdateRequestStatus,
+  dxListRequests, dxGetRequest, dxUpdateRequestStatus,
   dxListNotes, dxCreateNote, dxResolveNote, dxAccessToken,
   dxListAttachments, dxCreateAttachment,
-  dxListVehicleMedia, dxCreateVehicleMedia,
+  dxListVehicleMedia,
   dxListBranches, dxCreateBranch, dxUpdateBranch, dxDeleteBranch,
   dxListAgents, dxCreateAgent, dxUpdateAgent, dxDeleteAgent,
   dxUploadFile, dxAssetUrl, dxFetchAsset, isDirectusAssetUrl,
@@ -419,49 +419,6 @@ export async function updateRequestStatus(id: string, status: RequestStatus): Pr
   return fresh;
 }
 
-async function uploadFirst(files: File[]): Promise<string | null> {
-  const f = files[0];
-  if (!f) return null;
-  const { prepareForUpload } = await import("@/lib/imagePrep");
-  const prepared = await prepareForUpload(f);
-  return await dxUploadFile(prepared);
-}
-
-async function uploadPrepared(file: File): Promise<string> {
-  const { prepareForUpload } = await import("@/lib/imagePrep");
-  const prepared = await prepareForUpload(file);
-  return dxUploadFile(prepared);
-}
-
-/**
- * Upload a single file through the dedicated public endpoint
- * (`/api/public/upload-file`). Used for customer-facing uploads where we must
- * NOT depend on the visitor's Directus session — see route docstring for
- * details. Returns the new file id.
- */
-async function uploadPreparedPublic(file: File): Promise<string> {
-  const { prepareForUpload } = await import("@/lib/imagePrep");
-  const prepared = await prepareForUpload(file);
-  const fd = new FormData();
-  fd.append("file", prepared, prepared.name);
-  const res = await fetch("/api/public/upload-file", {
-    method: "POST",
-    body: fd,
-  });
-  const json = await res.json().catch(() => ({} as { ok?: boolean; id?: string; error?: string }));
-  if (!res.ok || !json?.ok || !json.id) {
-    const detail = json?.error || `upload failed (${res.status})`;
-    throw new Error(detail);
-  }
-  return json.id as string;
-}
-
-async function uploadFirstPublic(files: File[]): Promise<string | null> {
-  const f = files[0];
-  if (!f) return null;
-  return uploadPreparedPublic(f);
-}
-
 export async function submitUpload(input: {
   agentId: string;
   customerName?: string;
@@ -476,99 +433,35 @@ export async function submitUpload(input: {
   };
   optional?: { inspection?: File | null };
 }): Promise<{ id: string }> {
-  // Upload "front" file for the three doc types — Directus stores one file id
-  // per slot in the request row; the rest go into the *_attachments tables.
-  const [registration, license, emirates] = await Promise.all([
-    uploadFirstPublic(input.images.registration),
-    uploadFirstPublic(input.images.license),
-    uploadFirstPublic(input.images.emirates),
-  ]);
-  const inspection = input.optional?.inspection
-    ? await uploadPreparedPublic(input.optional.inspection)
-    : null;
+  const { prepareForUpload } = await import("@/lib/imagePrep");
+  const fd = new FormData();
+  fd.append("agent_id", input.agentId);
+  fd.append("customer_name", input.customerName ?? "");
+  fd.append("customer_email", input.customerEmail ?? "");
+  fd.append("customer_phone", input.customerPhone ?? "");
 
-  // Resolve agent's branch + display name. Try the local cache first (fast path
-  // for logged-in dashboards), then fall back to a server lookup so anonymous
-  // customers using a public agent link still tag the request correctly.
-  let agent = listAgents().find((a) => a.id === input.agentId || a.userId === input.agentId);
-  let branch = agent?.branch ?? "";
-  let agentName = agent?.name ?? "";
-  if (!branch || !agentName) {
-    try {
-      const res = await fetch(
-        `/api/public/resolve-agent?agent_id=${encodeURIComponent(input.agentId)}`,
-        { cache: "no-store" },
-      );
-      if (res.ok) {
-        const j = (await res.json()) as { found?: boolean; name?: string; branch?: string };
-        if (j.found) {
-          if (!agentName && j.name) agentName = j.name;
-          if (!branch && j.branch) branch = j.branch;
-        }
-      }
-    } catch (e) {
-      console.warn("agent resolve failed", e);
+  const appendFiles = async (key: string, files: File[]) => {
+    for (const file of files) {
+      const prepared = await prepareForUpload(file);
+      fd.append(key, prepared, prepared.name);
     }
-  }
-  if (!agentName) agentName = input.agentId;
+  };
 
-  const created = await dxCreateRequest({
-    agent_id: input.agentId,
-    agent_name: agentName,
-    branch,
-    registration,
-    license,
-    emirates,
-    inspection,
-    customer_name: input.customerName,
-    customer_email: input.customerEmail,
-    customer_phone: input.customerPhone,
-  }, { auth: false });
-  const reqId = String(created.id);
+  await appendFiles("registration", input.images.registration);
+  await appendFiles("license", input.images.license);
+  await appendFiles("emirates", input.images.emirates);
+  await appendFiles("vehicle_media", input.images.vehicleMedia);
+  await appendFiles("attachments", input.images.attachments ?? []);
+  if (input.optional?.inspection) await appendFiles("inspection", [input.optional.inspection]);
 
-  // Vehicle media (mixed images + videos).
-  for (const f of input.images.vehicleMedia) {
-    try {
-      const fileId = await uploadPreparedPublic(f);
-      await dxCreateVehicleMedia({
-        request: reqId,
-        file: fileId,
-        kind: f.type.startsWith("video/") ? "video" : "image",
-      }, { auth: false });
-    } catch (e) { console.error("vehicle media upload failed", e); }
-  }
-
-  // Free-form attachments.
-  for (const f of input.images.attachments ?? []) {
-    try {
-      const fileId = await uploadPreparedPublic(f);
-      await dxCreateAttachment({
-        request: reqId,
-        file: fileId,
-        original_name: f.name,
-      }, false, { auth: false });
-    } catch (e) { console.error("attachment upload failed", e); }
-  }
-
-  // Also persist any extra registration/license/emirates pages as attachments.
-  const extras = [
-    ...input.images.registration.slice(1),
-    ...input.images.license.slice(1),
-    ...input.images.emirates.slice(1),
-  ];
-  for (const f of extras) {
-    try {
-      const fileId = await uploadPreparedPublic(f);
-      await dxCreateAttachment({
-        request: reqId,
-        file: fileId,
-        original_name: f.name,
-      }, false, { auth: false });
-    } catch (e) { console.error("extra page upload failed", e); }
+  const res = await fetch("/api/public/submit-upload", { method: "POST", body: fd, cache: "no-store" });
+  const json = await res.json().catch(() => ({} as { ok?: boolean; id?: string; error?: string }));
+  if (!res.ok || !json?.ok || !json.id) {
+    throw new Error(json?.error || `upload failed (${res.status})`);
   }
 
   notifyChange();
-  return { id: created.request_display_id || reqId };
+  return { id: json.id };
 }
 
 // ---------------------------------------------------------------------------

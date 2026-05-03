@@ -6,6 +6,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo } from "@/components/Logo";
 import { MultiUploadCard } from "@/components/MultiUploadCard";
 import { useLang } from "@/i18n/LanguageProvider";
+import { getRequest, appendAttachmentsToRequest } from "@/services/api";
 
 export const Route = createFileRoute("/r/$requestId")({
   component: ReuploadPage,

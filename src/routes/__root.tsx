@@ -2,6 +2,7 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/r
 import { Component, type ReactNode } from "react";
 import { LanguageProvider, useLang } from "@/i18n/LanguageProvider";
 import { Footer } from "@/components/Footer";
+import { DemoBanner } from "@/components/DemoBanner";
 import { Toaster } from "@/components/ui/sonner";
 import appCss from "../styles.css?url";
 
@@ -61,13 +62,13 @@ export const Route = createRootRoute({
       { title: "الراحة لوساطة التأمين — رفع المستندات" },
       { name: "description", content: "بوابة آمنة لرفع مستندات التأمين (الرخصة، الاستمارة، الهوية) لشركة الراحة لوساطة التأمين." },
       { name: "theme-color", content: "#1c244b" },
-      { property: "og:site_name", content: "Al Raha Insurance Broker" },
+      { property: "og:site_name", content: "DocFlow Demo" },
       { property: "og:title", content: "الراحة لوساطة التأمين — رفع المستندات" },
       { name: "twitter:title", content: "الراحة لوساطة التأمين — رفع المستندات" },
       { property: "og:description", content: "بوابة آمنة لرفع مستندات التأمين الخاصة بك. سريعة، موثوقة، ومحمية." },
       { name: "twitter:description", content: "بوابة آمنة لرفع مستندات التأمين الخاصة بك. سريعة، موثوقة، ومحمية." },
       { property: "og:image", content: "/logo.webp" },
-      { property: "og:image:alt", content: "Al Raha Insurance Broker" },
+      { property: "og:image:alt", content: "DocFlow Demo" },
       { name: "twitter:image", content: "/logo.webp" },
       { name: "twitter:card", content: "summary" },
       { property: "og:type", content: "website" },
@@ -112,6 +113,7 @@ function AppChrome() {
   const { dir } = useLang();
   return (
     <div className="flex min-h-screen flex-col">
+      <DemoBanner />
       <div className="flex-1">
         <Outlet />
       </div>

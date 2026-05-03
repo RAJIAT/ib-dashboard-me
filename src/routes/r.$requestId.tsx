@@ -6,6 +6,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { Logo } from "@/components/Logo";
 import { MultiUploadCard } from "@/components/MultiUploadCard";
 import { useLang } from "@/i18n/LanguageProvider";
+import { getRequest, appendAttachmentsToRequest } from "@/services/api";
 
 export const Route = createFileRoute("/r/$requestId")({
   component: ReuploadPage,
@@ -30,34 +31,37 @@ function ReuploadPage() {
   const [done, setDone] = useState(false);
 
   const refresh = async () => {
-    try {
-      const res = await fetch(
-        `/api/public/reupload-request?id=${encodeURIComponent(requestId)}`,
-        { cache: "no-store" },
-      );
-      const data: ReuploadInfo = await res.json();
-      setInfo(data);
-    } catch (e) {
-      console.error("reupload-request failed", e);
-      setInfo({ found: false });
-    } finally {
-      setLoading(false);
-    }
+    const req = await getRequest(requestId);
+    if (!req) { setInfo({ found: false }); return; }
+    const missing = req.notes
+      .filter((n) => n.kind === "missing" && !n.resolvedAt)
+      .map((n) => ({ id: n.id, text: n.text, createdAt: n.createdAt }));
+    setInfo({
+      found: true,
+      id: req.id,
+      display: req.id,
+      customerName: req.customerName ?? null,
+      missing,
+    });
   };
 
   useEffect(() => {
     let alive = true;
     void (async () => {
       try {
-        const res = await fetch(
-          `/api/public/reupload-request?id=${encodeURIComponent(requestId)}`,
-          { cache: "no-store" },
-        );
-        const data: ReuploadInfo = await res.json();
-        if (alive) setInfo(data);
-      } catch (e) {
-        console.error("reupload-request failed", e);
-        if (alive) setInfo({ found: false });
+        const req = await getRequest(requestId);
+        if (!alive) return;
+        if (!req) { setInfo({ found: false }); return; }
+        const missing = req.notes
+          .filter((n) => n.kind === "missing" && !n.resolvedAt)
+          .map((n) => ({ id: n.id, text: n.text, createdAt: n.createdAt }));
+        setInfo({
+          found: true,
+          id: req.id,
+          display: req.id,
+          customerName: req.customerName ?? null,
+          missing,
+        });
       } finally {
         if (alive) setLoading(false);
       }
@@ -69,25 +73,11 @@ function ReuploadPage() {
     if (!info?.found || files.length === 0 || submitting) return;
     setSubmitting(true);
     try {
-      const fd = new FormData();
-      fd.append("id", requestId);
-      for (const f of files) fd.append("file", f, f.name);
-      const res = await fetch("/api/public/reupload-submit", { method: "POST", body: fd });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) {
-        const msg =
-          res.status === 413
-            ? lang === "ar"
-              ? "حجم الملفات كبير جداً، جرّب صور أصغر أو أقل عدداً"
-              : "Files too large, try smaller or fewer files"
-            : (lang === "ar" ? "تعذر إرسال الملفات" : "Failed to send files");
-        toast.error(msg);
-        setSubmitting(false);
-        return;
-      }
+      await appendAttachmentsToRequest(requestId, files);
       setDone(true);
       setFiles([]);
       await refresh();
+      toast.success(lang === "ar" ? "تم إرسال الملفات" : "Files sent");
     } catch (err) {
       console.error(err);
       toast.error(lang === "ar" ? "تعذر إرسال الملفات" : "Failed to send files");

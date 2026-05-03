@@ -5,7 +5,7 @@ type Dir = "rtl" | "ltr";
 export const translations = {
   ar: {
     dir: "rtl" as Dir,
-    brand: "الراحة للوساطة التأمينية",
+    brand: "DocFlow Demo",
     langSwitch: "EN",
     upload: {
       title: "ارفع مستنداتك خلال دقيقة",
@@ -335,7 +335,7 @@ export const translations = {
   },
   en: {
     dir: "ltr" as Dir,
-    brand: "Al Raha Insurance Broker",
+    brand: "DocFlow Demo",
     langSwitch: "العربية",
     upload: {
       title: "Upload your documents in under a minute",
@@ -635,7 +635,7 @@ export const translations = {
     },
     hero: {
       trust: "Your data is encrypted and handled with full confidentiality",
-      valueProp: "Al Raha's secure portal for uploading and managing vehicle insurance documents in minutes.",
+      valueProp: "DocFlow's secure portal for uploading and managing vehicle insurance documents in minutes.",
     },
     common: {
       filtering: "Filtering...",
@@ -656,7 +656,7 @@ export const translations = {
       filesHint: "Images / PDF / docs — max 5MB per file",
     },
     footer: {
-      rights: (year: number) => `© ${year} Al Raha Insurance Broker L.L.C. All rights reserved.`,
+      rights: (year: number) => `© ${year} DocFlow Demo All rights reserved.`,
       tagline: "A secure portal for uploading and managing insurance documents.",
       dataNotice: "All submitted data is encrypted and handled confidentially in accordance with our privacy policy.",
       privacy: "Privacy Policy",

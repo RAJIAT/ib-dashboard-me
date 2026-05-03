@@ -427,10 +427,24 @@ async function uploadFirst(files: File[]): Promise<string | null> {
   return await dxUploadFile(prepared);
 }
 
+async function uploadFirstPublic(files: File[]): Promise<string | null> {
+  const f = files[0];
+  if (!f) return null;
+  const { prepareForUpload } = await import("@/lib/imagePrep");
+  const prepared = await prepareForUpload(f);
+  return dxUploadFile(prepared, { auth: false });
+}
+
 async function uploadPrepared(file: File): Promise<string> {
   const { prepareForUpload } = await import("@/lib/imagePrep");
   const prepared = await prepareForUpload(file);
   return dxUploadFile(prepared);
+}
+
+async function uploadPreparedPublic(file: File): Promise<string> {
+  const { prepareForUpload } = await import("@/lib/imagePrep");
+  const prepared = await prepareForUpload(file);
+  return dxUploadFile(prepared, { auth: false });
 }
 
 export async function submitUpload(input: {

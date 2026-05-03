@@ -18,10 +18,10 @@
  */
 const DEFAULT_DIRECTUS_URL = "/api/directus";
 
-const viteEnv = import.meta.env as { VITE_DIRECTUS_URL?: string };
-
-export const DIRECTUS_URL: string | undefined =
-  (viteEnv.VITE_DIRECTUS_URL || DEFAULT_DIRECTUS_URL)?.replace(/\/$/, "") || undefined;
+// Keep browser traffic on the same-origin proxy. Some production builds still
+// inject VITE_DIRECTUS_URL=/directus, which bypasses the anonymous-upload
+// validation/admin fallback and breaks customer submissions on fresh devices.
+export const DIRECTUS_URL: string | undefined = DEFAULT_DIRECTUS_URL;
 
 export const isDirectusEnabled = () => !!DIRECTUS_URL;
 

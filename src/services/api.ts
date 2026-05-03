@@ -1,85 +1,45 @@
 /**
- * API service layer — Directus-backed.
+ * Demo API service — fully local (localStorage-backed).
  *
- * Every read and write goes to the on-premise Directus instance via the
- * /api/directus same-origin proxy (see src/routes/api/directus.$.ts). No
- * business data lives in localStorage anymore — only the Directus session
- * tokens (handled inside src/services/directus.ts) and a small cached copy
- * of the current user (so synchronous getCurrentUser() keeps working).
+ * This module preserves the exact same exports the rest of the app uses
+ * (login, listRequests, submitUpload, addRequestNote, getAgents, etc.) but
+ * routes everything through src/services/demoStore.ts. No HTTP calls.
  */
 
 import {
-  dxLogin, dxLogout, dxFetchMe, dxHasSession, isDirectusEnabled,
-  dxListRequests, dxGetRequest, dxUpdateRequestStatus,
-  dxListNotes, dxCreateNote, dxResolveNote, dxAccessToken,
-  dxListAttachments, dxCreateAttachment,
-  dxListVehicleMedia,
-  dxListBranches, dxCreateBranch, dxUpdateBranch, dxDeleteBranch,
-  dxListAgents, dxCreateAgent, dxUpdateAgent, dxDeleteAgent,
-  dxUploadFile, dxAssetUrl, dxFetchAsset, isDirectusAssetUrl,
-  type DxUser, type DxRequest, type DxNote, type DxAttachment,
-  type DxVehicleMedia, type DxBranch,
-} from "./directus";
+  fileToDataUrl,
+  getAgents as dsGetAgents,
+  getAudit, setAudit,
+  getBranches as dsGetBranches,
+  getRequests, setRequests,
+  getUsers,
+  newRequestId,
+  notify,
+  setAgents as dsSetAgents,
+  setBranches as dsSetBranches,
+  type DemoAgent,
+  type DemoAttachment,
+  type DemoBranch,
+  type DemoNote,
+  type DemoRequest,
+  type DemoStatus,
+  type DemoUser,
+} from "./demoStore";
+
+// Trigger seeding by accessing the store once.
+export function ensureSeeded() { getUsers(); }
 
 // ---------------------------------------------------------------------------
-// Public types (kept stable so the rest of the app keeps working)
+// Public types — kept stable for the rest of the app.
 // ---------------------------------------------------------------------------
 
-export type RequestStatus =
-  | "new"
-  | "linkSent"
-  | "processing"
-  | "sold"
-  | "rejected"
-  | "reupload";
-
+export type RequestStatus = DemoStatus;
 export type RequestNoteKind = "comment" | "missing";
-
-export type RequestNote = {
-  id: string;
-  authorId: string;
-  authorName: string;
-  authorRole: "admin" | "supervisor" | "agent";
-  text: string;
-  kind: RequestNoteKind;
-  createdAt: string;
-  resolvedAt?: string;
-};
-
-export type AttachmentMeta = {
-  name: string;
-  type: string;
-  size: number;
-  url: string;
-};
-
-export type InsuranceRequest = {
-  id: string;
-  uuid: string;
-  agentId: string;
-  agentName: string;
-  branch: string;
-  status: RequestStatus;
-  createdAt: string;
-  customerName?: string;
-  customerEmail?: string;
-  customerPhone?: string;
-  notes: RequestNote[];
-  images: {
-    registration: string[];
-    license: string[];
-    emirates: string[];
-    vehicleMedia: Array<
-      | { kind: "image"; url: string }
-      | { kind: "video"; name: string; size: number; type: string }
-    >;
-    inspection?: string;
-    attachments: AttachmentMeta[];
-    missingAttachments?: AttachmentMeta[];
-  };
-};
-
+export type RequestNote = DemoNote;
+export type AttachmentMeta = DemoAttachment;
+export type InsuranceRequest = DemoRequest;
 export type Role = "agent" | "admin" | "supervisor";
+export type AgentRole = "agent" | "supervisor";
 
 export type AuthUser = {
   id: string;
@@ -90,129 +50,75 @@ export type AuthUser = {
   branch?: string;
 };
 
-export function canDelete(u: AuthUser | null | undefined): boolean {
-  return u?.role === "admin";
-}
-export function canManageAgents(u: AuthUser | null | undefined): boolean {
-  return u?.role === "admin" || u?.role === "supervisor";
-}
-export function canDeleteAgents(u: AuthUser | null | undefined): boolean {
-  return u?.role === "admin";
-}
-export function canSeeAllBranches(u: AuthUser | null | undefined): boolean {
-  return u?.role === "admin";
-}
+export type Agent = {
+  userId?: string;
+  id: string;
+  name: string;
+  email?: string;
+  branch?: string;
+  active: boolean;
+  role?: AgentRole;
+  supervisorId?: string;
+};
 
-// Re-export so existing callers keep working.
-export { dxAssetUrl, dxFetchAsset, isDirectusAssetUrl };
+export function canDelete(u: AuthUser | null | undefined) { return u?.role === "admin"; }
+export function canManageAgents(u: AuthUser | null | undefined) { return u?.role === "admin" || u?.role === "supervisor"; }
+export function canDeleteAgents(u: AuthUser | null | undefined) { return u?.role === "admin"; }
+export function canSeeAllBranches(u: AuthUser | null | undefined) { return u?.role === "admin"; }
+
+// Asset URL helpers — in demo mode every asset is a data URL.
+export function dxAssetUrl(s: string) { return s; }
+export function isDirectusAssetUrl(_: string) { return false; }
+export async function dxFetchAsset(_: string) { return null; }
 
 // ---------------------------------------------------------------------------
-// Local state — only the auth cache and a small in-memory mirror so that
-// synchronous list*() helpers can return immediately while the network
-// request refreshes the cache in the background.
+// Subscription helpers
+// ---------------------------------------------------------------------------
+
+const REQ_EVT = "aib:requests-changed";
+const AGT_EVT = "aib:agents-changed";
+const BR_EVT = "aib:branches-changed";
+
+function sub(evt: string, cb: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const fn = () => cb();
+  window.addEventListener(evt, fn);
+  return () => window.removeEventListener(evt, fn);
+}
+export const subscribeRequests = (cb: () => void) => sub(REQ_EVT, cb);
+export const subscribeAgents = (cb: () => void) => sub(AGT_EVT, cb);
+export const subscribeBranches = (cb: () => void) => sub(BR_EVT, cb);
+
+// ---------------------------------------------------------------------------
+// Auth — match by email/password against demo users.
 // ---------------------------------------------------------------------------
 
 const AUTH_KEY = "aib_auth_user";
-const CHANGE_EVENT = "aib:requests-changed";
-const AGENTS_CHANGE_EVENT = "aib:agents-changed";
-const BRANCHES_CHANGE_EVENT = "aib:branches-changed";
 
-function notifyChange() {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(CHANGE_EVENT));
-}
-function notifyAgentsChange() {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(AGENTS_CHANGE_EVENT));
-}
-function notifyBranchesChange() {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(BRANCHES_CHANGE_EVENT));
-}
-
-export function subscribeRequests(cb: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-  const onChange = () => cb();
-  window.addEventListener(CHANGE_EVENT, onChange);
-  return () => window.removeEventListener(CHANGE_EVENT, onChange);
-}
-export function subscribeAgents(cb: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-  const onChange = () => cb();
-  window.addEventListener(AGENTS_CHANGE_EVENT, onChange);
-  return () => window.removeEventListener(AGENTS_CHANGE_EVENT, onChange);
-}
-export function subscribeBranches(cb: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-  const onChange = () => cb();
-  window.addEventListener(BRANCHES_CHANGE_EVENT, onChange);
-  return () => window.removeEventListener(BRANCHES_CHANGE_EVENT, onChange);
-}
-
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-
-function mapDxUserToAuth(me: {
-  id: string; email: string;
-  first_name?: string; last_name?: string;
-  role?: { name?: string };
-  agent_id?: string; branch?: string;
-}): AuthUser {
-  const roleName = (me.role?.name ?? "").toLowerCase();
-  let role: Role = "agent";
-  if (roleName.includes("admin")) role = "admin";
-  else if (roleName.includes("supervisor")) role = "supervisor";
-  const name = [me.first_name, me.last_name].filter(Boolean).join(" ").trim() || me.email;
-  return {
-    id: me.id,
-    email: me.email,
-    name,
-    role,
-    agentId: me.agent_id,
-    branch: me.branch,
-  };
+function userToAuth(u: DemoUser): AuthUser {
+  return { id: u.id, email: u.email, name: u.name, role: u.role, agentId: u.agentId, branch: u.branch };
 }
 
 export async function login(email: string, password: string): Promise<AuthUser> {
-  if (!isDirectusEnabled()) throw new Error("Backend not configured");
-  const me = await dxLogin(email, password);
-  const auth = mapDxUserToAuth(me);
-  if (typeof window !== "undefined") {
-    localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
-  }
-  import("./audit").then(({ logEvent }) =>
-    logEvent({
-      action: "auth.login",
-      entityType: "auth",
-      entityId: auth.id,
-      entityLabel: auth.name,
-      branch: auth.branch ?? null,
-      actor: { id: auth.id, name: auth.name, role: auth.role, branch: auth.branch ?? null },
-    }),
+  const u = getUsers().find(
+    (x) => x.email.toLowerCase() === email.toLowerCase() && x.password === password,
   );
+  if (!u) throw new Error("Invalid credentials");
+  const auth = userToAuth(u);
+  if (typeof window !== "undefined") localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
+  logEvent({ action: "auth.login", entityType: "auth", entityId: auth.id, entityLabel: auth.name, actor: { id: auth.id, name: auth.name, role: auth.role, branch: auth.branch ?? null } });
   return auth;
 }
 
-export async function signUp(_email: string, _password: string, _fullName: string): Promise<AuthUser> {
-  throw new Error("Sign up is disabled. Contact your administrator.");
+export async function signUp(): Promise<AuthUser> {
+  throw new Error("Sign up is disabled in demo.");
 }
 
 export async function logout() {
   const cur = getCurrentUser();
   if (cur) {
-    import("./audit").then(({ logEvent }) =>
-      logEvent({
-        action: "auth.logout",
-        entityType: "auth",
-        entityId: cur.id,
-        entityLabel: cur.name,
-        branch: cur.branch ?? null,
-        actor: { id: cur.id, name: cur.name, role: cur.role, branch: cur.branch ?? null },
-      }),
-    );
+    logEvent({ action: "auth.logout", entityType: "auth", entityId: cur.id, entityLabel: cur.name, actor: { id: cur.id, name: cur.name, role: cur.role, branch: cur.branch ?? null } });
   }
-  try { dxLogout(); } catch { /* ignore */ }
   if (typeof window !== "undefined") localStorage.removeItem(AUTH_KEY);
 }
 
@@ -224,199 +130,75 @@ export function getCurrentUser(): AuthUser | null {
 }
 
 export async function refreshCurrentUser(): Promise<AuthUser | null> {
-  if (typeof window === "undefined") return null;
-  if (!isDirectusEnabled() || !dxHasSession()) {
-    localStorage.removeItem(AUTH_KEY);
-    return null;
-  }
-  try {
-    const me = await dxFetchMe();
-    const auth = mapDxUserToAuth(me);
-    localStorage.setItem(AUTH_KEY, JSON.stringify(auth));
-    return auth;
-  } catch {
-    localStorage.removeItem(AUTH_KEY);
-    return null;
-  }
+  return getCurrentUser();
 }
 
 // ---------------------------------------------------------------------------
 // Branches
 // ---------------------------------------------------------------------------
 
-let _branchesCache: DxBranch[] = [];
-
 export function listBranches(): string[] {
-  // Returns branch codes for legacy callers that expect string[].
-  return _branchesCache.length
-    ? _branchesCache.filter(b => b.is_active).map(b => b.code)
-    : [];
+  return dsGetBranches().filter((b) => b.is_active).map((b) => b.code);
+}
+export function listBranchObjects(): DemoBranch[] { return dsGetBranches(); }
+
+export async function getBranches(opts?: { onlyActive?: boolean }): Promise<DemoBranch[]> {
+  const all = dsGetBranches();
+  return opts?.onlyActive ? all.filter((b) => b.is_active) : all;
 }
 
-export function listBranchObjects(): DxBranch[] {
-  return _branchesCache;
-}
-
-export async function getBranches(opts?: { onlyActive?: boolean }): Promise<DxBranch[]> {
-  const list = await dxListBranches(opts);
-  _branchesCache = list;
-  notifyBranchesChange();
-  return list;
-}
-
-export async function createBranch(input: {
-  name: string; code: string; address?: string; phone?: string; is_active?: boolean;
-}): Promise<DxBranch> {
-  const created = await dxCreateBranch({
-    name: input.name,
-    code: input.code,
-    address: input.address ?? "",
-    phone: input.phone ?? "",
-    is_active: input.is_active ?? true,
-  });
-  await getBranches();
+export async function createBranch(input: { name: string; code: string; address?: string; phone?: string; is_active?: boolean }): Promise<DemoBranch> {
+  const list = dsGetBranches();
+  const id = (list.reduce((m, x) => Math.max(m, x.id), 0) || 0) + 1;
+  const created: DemoBranch = { id, name: input.name, code: input.code, address: input.address, phone: input.phone, is_active: input.is_active ?? true };
+  dsSetBranches([...list, created]);
   return created;
 }
 
-export async function updateBranch(id: number, patch: Partial<{
-  name: string; code: string; address: string; phone: string; is_active: boolean;
-}>): Promise<DxBranch> {
-  const updated = await dxUpdateBranch(id, patch);
-  await getBranches();
-  return updated;
+export async function updateBranch(id: number, patch: Partial<DemoBranch>): Promise<DemoBranch> {
+  const list = dsGetBranches();
+  const next = list.map((b) => (b.id === id ? { ...b, ...patch } : b));
+  dsSetBranches(next);
+  return next.find((b) => b.id === id)!;
 }
 
 export async function deleteBranch(id: number): Promise<void> {
-  await dxDeleteBranch(id);
-  await getBranches();
+  dsSetBranches(dsGetBranches().filter((b) => b.id !== id));
 }
 
 // ---------------------------------------------------------------------------
 // Requests
 // ---------------------------------------------------------------------------
 
-function fileIdToUrl(fileId: string | null | undefined): string {
-  if (!fileId) return "";
-  return dxAssetUrl(fileId);
-}
-
-function mapDxRequestToInsurance(
-  r: DxRequest,
-  notes: DxNote[],
-  attachments: DxAttachment[],
-  missingAttachments: DxAttachment[],
-  vehicleMedia: DxVehicleMedia[],
-): InsuranceRequest {
-  const noteRoleMap: Record<string, RequestNote["authorRole"]> = {
-    admin: "admin", supervisor: "supervisor", agent: "agent",
-  };
-  return {
-    id: r.request_display_id || String(r.id),
-    uuid: String(r.id),
-    agentId: r.agent_id ?? "",
-    agentName: r.agent_name ?? "",
-    branch: r.branch ?? "",
-    status: (r.status as RequestStatus) || "new",
-    createdAt: r.date_created,
-    customerName: r.customer_name ?? undefined,
-    customerEmail: r.customer_email ?? undefined,
-    customerPhone: r.customer_phone ?? undefined,
-    notes: notes.map((n) => ({
-      id: String(n.id),
-      authorId: n.author_id ?? "",
-      authorName: n.author_name ?? "",
-      authorRole: noteRoleMap[(n.author_role ?? "").toLowerCase()] ?? "agent",
-      text: n.text,
-      kind: (n.kind as RequestNoteKind) || "comment",
-      createdAt: n.date_created,
-      resolvedAt: n.resolved_at ?? undefined,
-    })),
-    images: {
-      registration: r.registration ? [fileIdToUrl(r.registration)] : [],
-      license: r.license ? [fileIdToUrl(r.license)] : [],
-      emirates: r.emirates ? [fileIdToUrl(r.emirates)] : [],
-      vehicleMedia: vehicleMedia.map((m) =>
-        m.kind === "video"
-          ? { kind: "video" as const, name: "video", size: 0, type: "video/mp4" }
-          : { kind: "image" as const, url: fileIdToUrl(m.file) },
-      ),
-      inspection: r.inspection ? fileIdToUrl(r.inspection) : undefined,
-      attachments: attachments.map((a) => ({
-        name: a.original_name ?? "file",
-        type: "",
-        size: 0,
-        url: fileIdToUrl(a.file),
-      })),
-      missingAttachments: missingAttachments.length
-        ? missingAttachments.map((a) => ({
-            name: a.original_name ?? "file",
-            type: "",
-            size: 0,
-            url: fileIdToUrl(a.file),
-          }))
-        : undefined,
-    },
-  };
-}
-
 export async function listRequests(opts?: { agentId?: string; branch?: string }): Promise<InsuranceRequest[]> {
-  const rows = await dxListRequests({ agentId: opts?.agentId, branch: opts?.branch });
-  // For list view we don't fetch notes/attachments per row (too many round-trips).
-  return rows.map((r) => mapDxRequestToInsurance(r, [], [], [], []));
+  let list = getRequests();
+  if (opts?.agentId) list = list.filter((r) => r.agentId === opts.agentId);
+  if (opts?.branch) list = list.filter((r) => r.branch === opts.branch);
+  return [...list].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 export async function getRequest(id: string): Promise<InsuranceRequest | null> {
-  const row = await dxGetRequest(id);
-  if (!row) return null;
-  const reqId = String(row.id);
-  const [notes, attachments, missing, vehicleMedia] = await Promise.all([
-    dxListNotes(reqId).catch(() => [] as DxNote[]),
-    dxListAttachments(reqId, false).catch(() => [] as DxAttachment[]),
-    dxListAttachments(reqId, true).catch(() => [] as DxAttachment[]),
-    dxListVehicleMedia(reqId).catch(() => [] as DxVehicleMedia[]),
-  ]);
-  return mapDxRequestToInsurance(row, notes, attachments, missing, vehicleMedia);
+  return getRequests().find((r) => r.id === id || r.uuid === id) ?? null;
 }
 
 export async function resolveAssetUrl(stored: string): Promise<{ url: string; mime: string }> {
   if (!stored) return { url: "", mime: "" };
-  // For Directus assets we fetch with auth and return a blob URL.
-  if (isDirectusAssetUrl(stored)) {
-    const m = stored.match(/\/assets\/([^/?#]+)/);
-    if (m) {
-      const fetched = await dxFetchAsset(m[1]);
-      if (fetched) return fetched;
-    }
-  }
-  // Fallback: treat as direct URL or data URL.
-  let mime = "";
   const m = stored.match(/^data:([^;]+);/);
-  if (m) mime = m[1];
-  return { url: stored, mime };
+  return { url: stored, mime: m?.[1] ?? "" };
 }
 
 export async function updateRequestStatus(id: string, status: RequestStatus): Promise<InsuranceRequest> {
-  const cur = await dxGetRequest(id);
-  if (!cur) throw new Error("Request not found");
-  const before = cur.status;
-  await dxUpdateRequestStatus(String(cur.id), status);
-  const fresh = await getRequest(String(cur.id));
-  if (!fresh) throw new Error("Request not found");
-  notifyChange();
+  const list = getRequests();
+  const idx = list.findIndex((r) => r.id === id || r.uuid === id);
+  if (idx < 0) throw new Error("Request not found");
+  const before = list[idx].status;
+  const next = [...list];
+  next[idx] = { ...list[idx], status };
+  setRequests(next);
   if (before !== status) {
-    import("./audit").then(({ logEvent }) =>
-      logEvent({
-        action: "request.status_changed",
-        entityType: "request",
-        entityId: fresh.id,
-        entityLabel: fresh.id,
-        branch: fresh.branch ?? null,
-        before: { status: before },
-        after: { status },
-      }),
-    );
+    logEvent({ action: "request.status_changed", entityType: "request", entityId: next[idx].id, entityLabel: next[idx].id, branch: next[idx].branch, before: { status: before }, after: { status } });
   }
-  return fresh;
+  return next[idx];
 }
 
 export async function submitUpload(input: {
@@ -433,57 +215,47 @@ export async function submitUpload(input: {
   };
   optional?: { inspection?: File | null };
 }): Promise<{ id: string }> {
-  const { prepareForUpload } = await import("@/lib/imagePrep");
-  const fd = new FormData();
-  fd.append("agent_id", input.agentId);
-  fd.append("customer_name", input.customerName ?? "");
-  fd.append("customer_email", input.customerEmail ?? "");
-  fd.append("customer_phone", input.customerPhone ?? "");
+  const agent = dsGetAgents().find((a) => a.id === input.agentId);
+  const id = newRequestId();
+  const toUrls = async (files: File[]) => Promise.all(files.map((f) => fileToDataUrl(f)));
+  const registration = await toUrls(input.images.registration);
+  const license = await toUrls(input.images.license);
+  const emirates = await toUrls(input.images.emirates);
+  const vehicleMedia = await Promise.all(
+    input.images.vehicleMedia.map(async (f) =>
+      f.type.startsWith("video/")
+        ? { kind: "video" as const, name: f.name, size: f.size, type: f.type }
+        : { kind: "image" as const, url: await fileToDataUrl(f) },
+    ),
+  );
+  const attachments: DemoAttachment[] = await Promise.all(
+    (input.images.attachments ?? []).map(async (f) => ({
+      name: f.name, type: f.type, size: f.size, url: await fileToDataUrl(f),
+    })),
+  );
+  const inspection = input.optional?.inspection ? await fileToDataUrl(input.optional.inspection) : undefined;
 
-  const appendFiles = async (key: string, files: File[]) => {
-    for (const file of files) {
-      const prepared = await prepareForUpload(file);
-      fd.append(key, prepared, prepared.name);
-    }
+  const req: DemoRequest = {
+    id, uuid: id.toLowerCase(),
+    agentId: input.agentId,
+    agentName: agent?.name ?? input.agentId,
+    branch: agent?.branch ?? "",
+    status: "new",
+    createdAt: new Date().toISOString(),
+    customerName: input.customerName,
+    customerEmail: input.customerEmail,
+    customerPhone: input.customerPhone,
+    notes: [],
+    images: { registration, license, emirates, vehicleMedia, inspection, attachments },
   };
-
-  await appendFiles("registration", input.images.registration);
-  await appendFiles("license", input.images.license);
-  await appendFiles("emirates", input.images.emirates);
-  await appendFiles("vehicle_media", input.images.vehicleMedia);
-  await appendFiles("attachments", input.images.attachments ?? []);
-  if (input.optional?.inspection) await appendFiles("inspection", [input.optional.inspection]);
-
-  const res = await fetch("/api/public/submit-upload", { method: "POST", body: fd, cache: "no-store" });
-  const json = await res.json().catch(() => ({} as { ok?: boolean; id?: string; error?: string }));
-  if (!res.ok || !json?.ok || !json.id) {
-    throw new Error(json?.error || `upload failed (${res.status})`);
-  }
-
-  notifyChange();
-  return { id: json.id };
+  setRequests([req, ...getRequests()]);
+  logEvent({ action: "request.created", entityType: "request", entityId: id, entityLabel: id, branch: req.branch });
+  return { id };
 }
 
 // ---------------------------------------------------------------------------
 // Notes
 // ---------------------------------------------------------------------------
-
-async function notesApi(body: Record<string, unknown>): Promise<void> {
-  const token = await dxAccessToken();
-  if (!token) throw new Error("Not authenticated");
-  const res = await fetch("/api/notes", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json().catch(() => ({} as { ok?: boolean; error?: string }));
-  if (!res.ok || !json?.ok) {
-    throw new Error(json?.error || `notes ${res.status}`);
-  }
-}
 
 export async function addRequestNote(
   requestId: string,
@@ -491,254 +263,185 @@ export async function addRequestNote(
 ): Promise<InsuranceRequest> {
   const me = getCurrentUser();
   if (!me) throw new Error("Not authenticated");
-  const row = await dxGetRequest(requestId);
-  if (!row) throw new Error("Request not found");
-
-  const before = (await dxListNotes(String(row.id)).catch(() => [])).length;
-
-  // Prefer the server-side endpoint (uses admin token, no permission gaps).
-  // Fall back to a direct Directus write if the endpoint is unreachable.
-  try {
-    await notesApi({
-      action: "create",
-      requestId: String(row.id),
-      text: input.text.trim(),
-      kind: input.kind,
-    });
-  } catch (e) {
-    console.warn("[notes] server endpoint failed, falling back to direct write", e);
-    await dxCreateNote({
-      request: String(row.id),
-      text: input.text.trim(),
-      kind: input.kind,
-      author_id: me.id,
-      author_name: me.name,
-      author_role: me.role,
-    });
-    if (input.kind === "missing" && row.status !== "reupload") {
-      try { await dxUpdateRequestStatus(String(row.id), "reupload"); } catch (err) { console.error("status flip failed", err); }
-    }
-  }
-
-  // Re-fetch the request, retrying briefly if Directus hasn't indexed the
-  // new note yet (small write-read race we hit on the on-prem instance).
-  let fresh = await getRequest(String(row.id));
-  for (let i = 0; i < 3 && fresh && (fresh.notes?.length ?? 0) <= before; i++) {
-    await new Promise((r) => setTimeout(r, 250));
-    fresh = await getRequest(String(row.id));
-  }
-  if (!fresh) throw new Error("Request not found");
-  notifyChange();
-  return fresh;
+  const list = getRequests();
+  const idx = list.findIndex((r) => r.id === requestId || r.uuid === requestId);
+  if (idx < 0) throw new Error("Request not found");
+  const note: DemoNote = {
+    id: crypto.randomUUID(),
+    authorId: me.id,
+    authorName: me.name,
+    authorRole: me.role,
+    text: input.text.trim(),
+    kind: input.kind,
+    createdAt: new Date().toISOString(),
+  };
+  const next = [...list];
+  const req = { ...list[idx], notes: [...list[idx].notes, note] };
+  if (input.kind === "missing" && req.status !== "reupload") req.status = "reupload";
+  next[idx] = req;
+  setRequests(next);
+  return req;
 }
 
-export async function resolveRequestNote(
-  requestId: string,
-  noteId: string,
-): Promise<InsuranceRequest> {
-  const numericId = Number(noteId);
-  if (Number.isFinite(numericId)) {
-    try {
-      await notesApi({ action: "resolve", noteId: numericId });
-    } catch (e) {
-      console.warn("[notes] resolve via endpoint failed, falling back", e);
-      try { await dxResolveNote(numericId); } catch (err) { console.error("resolve direct failed", err); }
-    }
-  }
-  const fresh = await getRequest(requestId);
-  if (!fresh) throw new Error("Request not found");
-  notifyChange();
-  return fresh;
+export async function resolveRequestNote(requestId: string, noteId: string): Promise<InsuranceRequest> {
+  const list = getRequests();
+  const idx = list.findIndex((r) => r.id === requestId || r.uuid === requestId);
+  if (idx < 0) throw new Error("Request not found");
+  const next = [...list];
+  next[idx] = {
+    ...list[idx],
+    notes: list[idx].notes.map((n) => (n.id === noteId ? { ...n, resolvedAt: new Date().toISOString() } : n)),
+  };
+  setRequests(next);
+  return next[idx];
 }
 
 export async function appendAttachmentsToRequest(
   requestId: string,
   files: File[],
 ): Promise<InsuranceRequest> {
-  const row = await dxGetRequest(requestId);
-  if (!row) throw new Error("Request not found");
-  const reqId = String(row.id);
-  for (const f of files) {
-    if (f.type.startsWith("video/")) continue;
-    try {
-      const fileId = await dxUploadFile(f);
-      await dxCreateAttachment({
-        request: reqId,
-        file: fileId,
-        original_name: f.name,
-      }, true);
-    } catch (e) { console.error("missing attachment upload failed", e); }
-  }
-  // Auto-resolve open "missing" notes and move status back to processing.
-  try {
-    const notes = await dxListNotes(reqId);
-    for (const n of notes) {
-      if (n.kind === "missing" && !n.resolved_at) {
-        await dxResolveNote(n.id);
-      }
-    }
-    await dxUpdateRequestStatus(reqId, "processing");
-  } catch (e) { console.error("failed to flip request status to processing", e); }
-  const fresh = await getRequest(reqId);
-  if (!fresh) throw new Error("Request not found");
-  notifyChange();
-  return fresh;
-}
-
-
-
-// ---------------------------------------------------------------------------
-// Agents directory — backed by Directus Users (role = "Agent" or "Supervisor")
-// ---------------------------------------------------------------------------
-
-export type AgentRole = "agent" | "supervisor";
-
-export type Agent = {
-  userId?: string;
-  id: string;
-  name: string;
-  email?: string;
-  branch?: string;
-  active: boolean;
-  role?: AgentRole;
-  supervisorId?: string;
-};
-
-function dxUserToAgent(u: DxUser): Agent {
-  const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || u.email;
-  const roleName = (u.role?.name ?? "").toLowerCase();
-  const role: AgentRole = roleName.includes("supervisor") ? "supervisor" : "agent";
-  return {
-    userId: u.id,
-    id: u.agent_id || u.id,
-    name,
-    email: u.email,
-    branch: u.branch,
-    active: u.status === "active",
-    role,
-    supervisorId: u.supervisor_id ?? undefined,
+  const list = getRequests();
+  const idx = list.findIndex((r) => r.id === requestId || r.uuid === requestId);
+  if (idx < 0) throw new Error("Request not found");
+  const newAttachments: DemoAttachment[] = await Promise.all(
+    files.filter((f) => !f.type.startsWith("video/")).map(async (f) => ({
+      name: f.name, type: f.type, size: f.size, url: await fileToDataUrl(f),
+    })),
+  );
+  const next = [...list];
+  const req = list[idx];
+  next[idx] = {
+    ...req,
+    status: "processing",
+    notes: req.notes.map((n) => (n.kind === "missing" && !n.resolvedAt ? { ...n, resolvedAt: new Date().toISOString() } : n)),
+    images: {
+      ...req.images,
+      missingAttachments: [...(req.images.missingAttachments ?? []), ...newAttachments],
+    },
   };
+  setRequests(next);
+  return next[idx];
 }
 
-let _agentsCache: Agent[] = [];
+// ---------------------------------------------------------------------------
+// Agents
+// ---------------------------------------------------------------------------
 
-export function listAgents(): Agent[] { return _agentsCache; }
+function dsToAgent(a: DemoAgent): Agent { return { ...a }; }
 
-export async function getAgents(): Promise<Agent[]> {
-  const users = await dxListAgents();
-  _agentsCache = users.map(dxUserToAgent);
-  notifyAgentsChange();
-  return _agentsCache;
-}
+export function listAgents(): Agent[] { return dsGetAgents().map(dsToAgent); }
 
-/** Translate an Agent.id (public agent_id OR Directus userId) into a Directus userId. */
-function resolveSupervisorUserId(supervisorRef: string | null | undefined): string | null {
-  if (!supervisorRef) return null;
-  const match = _agentsCache.find((a) => a.id === supervisorRef || a.userId === supervisorRef);
-  return match?.userId ?? supervisorRef; // assume it's already a userId if not in cache
-}
+export async function getAgents(): Promise<Agent[]> { return listAgents(); }
 
 export async function createAgent(input: {
-  id: string; name: string; email?: string; branch?: string; role?: AgentRole; supervisorId?: string;
-  password?: string;
+  id: string; name: string; email?: string; branch?: string; role?: AgentRole; supervisorId?: string; password?: string;
 }): Promise<Agent> {
   if (!input.email) throw new Error("Email is required");
   if (!input.password || input.password.length < 6) throw new Error("Password (min 6 chars) is required");
-  // Make sure the agents cache is warm so we can resolve supervisorId → userId.
-  if (_agentsCache.length === 0) {
-    try { await getAgents(); } catch { /* non-fatal */ }
+  const list = dsGetAgents();
+  if (list.find((a) => a.id === input.id)) throw new Error("Agent ID already exists");
+  const userId = `u-${crypto.randomUUID().slice(0, 8)}`;
+  const agent: DemoAgent = {
+    userId, id: input.id, name: input.name, email: input.email, branch: input.branch,
+    active: true, role: input.role ?? "agent",
+    supervisorId: input.role === "agent" ? input.supervisorId : undefined,
+  };
+  dsSetAgents([...list, agent]);
+  // Add a matching demo user so they can also "log in" with their email.
+  const users = getUsers();
+  const usersKey = "demo:users";
+  const newUser: DemoUser = {
+    id: userId, email: input.email, password: input.password, name: input.name,
+    role: agent.role, agentId: agent.role === "agent" ? input.id : undefined, branch: input.branch,
+  };
+  if (typeof window !== "undefined") {
+    localStorage.setItem(usersKey, JSON.stringify([...users, newUser]));
   }
-  const [first_name, ...rest] = input.name.split(" ");
-  const created = await dxCreateAgent({
-    email: input.email,
-    password: input.password,
-    first_name: first_name || input.name,
-    last_name: rest.join(" "),
-    agent_id: input.id,
-    branch: input.branch,
-    role: input.role,
-    supervisor_id: input.role === "agent" ? resolveSupervisorUserId(input.supervisorId) : null,
-  });
-  const agent = dxUserToAgent(created);
-  await getAgents();
-  import("./audit").then(({ logEvent }) =>
-    logEvent({
-      action: "agent.created",
-      entityType: "agent",
-      entityId: agent.id,
-      entityLabel: agent.name,
-      branch: agent.branch ?? null,
-      after: agent,
-    }),
-  );
-  return agent;
+  logEvent({ action: "agent.created", entityType: "agent", entityId: agent.id, entityLabel: agent.name, branch: agent.branch, after: agent });
+  return dsToAgent(agent);
 }
 
 export async function updateAgent(id: string, patch: Partial<{
   name: string; email: string | null; branch: string | null; active: boolean; supervisorId: string | null;
-  role: AgentRole;
-  password: string;
+  role: AgentRole; password: string;
 }>): Promise<Agent> {
-  const before = _agentsCache.find((a) => a.id === id || a.userId === id);
-  if (!before || !before.userId) throw new Error("Agent not found");
-  const dxPatch: Parameters<typeof dxUpdateAgent>[1] = {};
-  if (patch.name !== undefined) {
-    const [fn, ...rest] = patch.name.split(" ");
-    dxPatch.first_name = fn || patch.name;
-    dxPatch.last_name = rest.join(" ");
-  }
-  if (patch.email !== undefined && patch.email !== null) dxPatch.email = patch.email;
-  if (patch.branch !== undefined) dxPatch.branch = patch.branch;
-  if (patch.active !== undefined) dxPatch.status = patch.active ? "active" : "suspended";
-  if (patch.password) dxPatch.password = patch.password;
-  if (patch.role !== undefined) dxPatch.role = patch.role;
-  // Supervisor link only applies to agents; clear it when promoting to supervisor.
-  const effectiveRole = patch.role ?? before.role ?? "agent";
-  if (patch.supervisorId !== undefined || patch.role !== undefined) {
-    dxPatch.supervisor_id = effectiveRole === "supervisor"
-      ? null
-      : resolveSupervisorUserId(patch.supervisorId);
-  }
-  const updated = await dxUpdateAgent(before.userId, dxPatch);
-  const after = dxUserToAgent(updated);
-  await getAgents();
-  const changed: Record<string, { before: unknown; after: unknown }> = {};
-  (["name", "email", "branch", "active", "supervisorId", "role"] as const).forEach((k) => {
-    if ((before as any)[k] !== (after as any)[k]) {
-      changed[k] = { before: (before as any)[k], after: (after as any)[k] };
+  const list = dsGetAgents();
+  const idx = list.findIndex((a) => a.id === id || a.userId === id);
+  if (idx < 0) throw new Error("Agent not found");
+  const before = list[idx];
+  const next = [...list];
+  next[idx] = {
+    ...before,
+    name: patch.name ?? before.name,
+    email: patch.email === null ? undefined : (patch.email ?? before.email),
+    branch: patch.branch === null ? undefined : (patch.branch ?? before.branch),
+    active: patch.active ?? before.active,
+    role: patch.role ?? before.role,
+    supervisorId: patch.supervisorId === null ? undefined : (patch.supervisorId ?? before.supervisorId),
+  };
+  dsSetAgents(next);
+  // sync user
+  if (typeof window !== "undefined") {
+    const users = getUsers();
+    const u = users.findIndex((x) => x.id === before.userId);
+    if (u >= 0) {
+      const updated = { ...users[u] };
+      if (patch.name) updated.name = patch.name;
+      if (patch.email) updated.email = patch.email;
+      if (patch.branch !== undefined) updated.branch = patch.branch ?? undefined;
+      if (patch.password) updated.password = patch.password;
+      if (patch.role) updated.role = patch.role;
+      const arr = [...users]; arr[u] = updated;
+      localStorage.setItem("demo:users", JSON.stringify(arr));
     }
-  });
-  let action: "agent.updated" | "agent.activated" | "agent.deactivated" = "agent.updated";
-  if (Object.keys(changed).length === 1 && "active" in changed) {
-    action = after.active ? "agent.activated" : "agent.deactivated";
   }
-  import("./audit").then(({ logEvent }) =>
-    logEvent({
-      action,
-      entityType: "agent",
-      entityId: after.id,
-      entityLabel: after.name,
-      branch: after.branch ?? null,
-      before, after,
-      meta: { changed: Object.keys(changed) },
-    }),
-  );
-  return after;
+  logEvent({ action: "agent.updated", entityType: "agent", entityId: next[idx].id, entityLabel: next[idx].name, branch: next[idx].branch, before, after: next[idx] });
+  return dsToAgent(next[idx]);
 }
 
 export async function deleteAgent(id: string): Promise<void> {
-  const before = _agentsCache.find((a) => a.id === id || a.userId === id);
-  if (!before || !before.userId) throw new Error("Agent not found");
-  await dxDeleteAgent(before.userId);
-  await getAgents();
-  import("./audit").then(({ logEvent }) =>
-    logEvent({
-      action: "agent.deleted",
-      entityType: "agent",
-      entityId: before.id,
-      entityLabel: before.name,
-      branch: before.branch ?? null,
-      before,
-    }),
-  );
+  const list = dsGetAgents();
+  const before = list.find((a) => a.id === id || a.userId === id);
+  if (!before) throw new Error("Agent not found");
+  dsSetAgents(list.filter((a) => a !== before));
+  if (typeof window !== "undefined") {
+    const users = getUsers().filter((u) => u.id !== before.userId);
+    localStorage.setItem("demo:users", JSON.stringify(users));
+  }
+  logEvent({ action: "agent.deleted", entityType: "agent", entityId: before.id, entityLabel: before.name, branch: before.branch, before });
+}
+
+// ---------------------------------------------------------------------------
+// Audit (delegated to a tiny inline impl so we don't need a separate file)
+// ---------------------------------------------------------------------------
+
+function logEvent(input: {
+  action: string;
+  entityType: "request" | "agent" | "auth";
+  entityId?: string | null;
+  entityLabel?: string | null;
+  branch?: string | null;
+  before?: unknown;
+  after?: unknown;
+  meta?: Record<string, unknown>;
+  actor?: { id: string; name: string; role: Role | "anonymous"; branch?: string | null };
+}) {
+  const u = input.actor ?? getCurrentUser();
+  const entry = {
+    id: crypto.randomUUID(),
+    ts: new Date().toISOString(),
+    actorId: u?.id ?? null,
+    actorName: u?.name ?? null,
+    actorRole: (u?.role ?? "anonymous") as Role | "anonymous",
+    actorBranch: (u && "branch" in u ? (u as { branch?: string | null }).branch ?? null : null),
+    action: input.action,
+    entityType: input.entityType,
+    entityId: input.entityId ?? null,
+    entityLabel: input.entityLabel ?? null,
+    branch: input.branch ?? null,
+    before: input.before ?? null,
+    after: input.after ?? null,
+    meta: input.meta ?? undefined,
+  };
+  setAudit([entry, ...getAudit()].slice(0, 500));
 }

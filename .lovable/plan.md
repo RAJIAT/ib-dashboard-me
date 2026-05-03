@@ -1,37 +1,78 @@
-المشكلة الحالية واضحة من رسالة الخطأ: رفع الملف من الجوال ما زال يمر بمسار يطلب من Directus إرجاع حقول ملف غير مسموحة للدور الحالي (`storage`, `title`, `filename_download`, `type`). بما أن الخطأ مستمر بعد إضافة `fields=id`، سأحوّل رفع نموذج العميل إلى endpoint وسيط منفصل في الخادم يستخدم صلاحية الخادم داخلياً ويرجع للمتصفح `{ id }` فقط، بدل الاعتماد على proxy عام قد يتأثر بجلسة مخزنة أو طريقة Directus في إرجاع metadata.
 
-الخطة:
+# خطة نسخة Demo (Local-Only)
 
-1. إنشاء endpoint عام ومخصص لرفع ملفات العملاء
-   - إضافة route مثل `/api/public/upload-file`.
-   - يستقبل `multipart/form-data` وفيه ملف واحد.
-   - يطبّق نفس قيود الأمان الحالية: نوع الملف المسموح، حد الحجم، ورفض الطلبات الفارغة أو غير الصالحة.
-   - يرفع الملف إلى Directus من الخادم باستخدام admin token، ثم يرجع فقط:
-     ```json
-     { "ok": true, "id": "..." }
-     ```
-   - لن يتم تمرير رسالة Directus الأصلية للعميل إذا فيها تفاصيل صلاحيات داخلية.
+تحويل التطبيق لنسخة تجريبية مستقلة بالكامل تشتغل في المتصفح بدون Directus / Supabase / أي API. كل البيانات تتخزن في `localStorage` و الملفات تتحول لـ Data URLs.
 
-2. تعديل رفع نموذج العميل فقط ليستخدم endpoint الجديد
-   - في `submitUpload`، كل ملفات العميل العامة ستُرفع عبر `/api/public/upload-file` بدلاً من `dxUploadFile`.
-   - بعد استلام `id`، سيكمل الكود الحالي إنشاء الطلب وربط الملفات بنفس الطريقة الموجودة.
-   - رفع المرفقات من لوحة الموظف/الداشبورد سيبقى كما هو حتى لا نكسر صلاحيات المستخدمين الداخليين.
+## 1. طبقة بيانات Demo جديدة
 
-3. تقليل الاعتماد على جلسة المتصفح في رابط العميل
-   - التأكد أن نموذج العميل لا يرسل Authorization عند الرفع أو إنشاء الطلب.
-   - هذا مهم لأن الموبايل قد يكون عليه جلسة Agent/Supervisor قديمة في localStorage، وهذا يفسّر لماذا الكمبيوتر يعمل والجوال لا.
+أنشئ `src/services/demoStore.ts`:
+- `demoUsers` (3 حسابات جاهزة):
+  - `admin@demo.com` / `demo123` — Admin
+  - `supervisor@demo.com` / `demo123` — Supervisor (فرع Dubai)
+  - `agent@demo.com` / `demo123` — Agent (id: A001, فرع Dubai)
+- `demoBranches`: Dubai, Abu Dhabi, Sharjah
+- `demoAgents`: 3 agents وهميين
+- `demoRequests`: 4 طلبات seed بحالات مختلفة (new / processing / sold / reupload) مع صور placeholder
+- كل الـ CRUD يكتب على `localStorage` تحت مفتاح `demo:*`
+- يرسل `aib:requests-changed` event بعد كل تغيير → الـ polling في `useRequestsLive` يلتقطها فوراً
 
-4. تحسين رسالة الخطأ للمستخدم
-   - إذا فشل الرفع، تظهر رسالة عربية/إنجليزية مفيدة مثل “تعذر رفع الملف، جرّب صورة أصغر أو أعد المحاولة” بدل تفاصيل `directus_files` التقنية.
-   - إبقاء التفاصيل التقنية في console فقط للتشخيص.
+## 2. إعادة كتابة `src/services/api.ts`
 
-5. إبقاء الحماية السابقة في proxy
-   - سنترك إجبار `fields=id` في `/api/directus/files` كحماية إضافية، لكن المسار الأساسي للعميل سيصبح endpoint الجديد الأكثر موثوقية.
+استبدال كل `dx*` calls بـ helpers من `demoStore`:
+- `login()` → فحص الإيميل/الباسورد من `demoUsers`
+- `submitUpload()` → يحفظ الطلب لوكال + يحول الملفات لـ Data URLs (مع compression للصور عبر `imagePrep`)
+- `listRequests / getRequest / updateRequestStatus / addRequestNote / etc.` كلها على store الذاكرة
+- نفس الـ types و الـ exports تبقى زي ما هي → لا تعديلات بباقي المكونات
 
-بعد التنفيذ ستحتاج تعمل deploy بنفس الأمر:
+## 3. حذف كل ما هو backend-related
 
-```bash
-cd ~/alrahaib-docs-flow-main-new && git pull && npm run build && pm2 restart portal
+- حذف: `src/services/directus.ts`, `src/integrations/supabase/*`, مجلد `supabase/`, مجلد `directus/`, `DIRECTUS_SETUP.md`
+- حذف: كل routes تحت `src/routes/api/` (submit-upload, upload-file, resolve-agent, role-id, agent-users, notes, directus.$, reupload-*)
+- إزالة `audit.ts` references للسيرفر، تحويل audit log لـ localStorage بسيط
+
+## 4. صفحة Login محسّنة (التعبئة التلقائية)
+
+في `src/routes/login.tsx` نضيف 3 أزرار كبيرة فوق الفورم:
 ```
+[Login as Admin]  [Login as Supervisor]  [Login as Agent]
+```
+كل زر يعبّي الإيميل/الباسورد ويسجّل دخول مباشرة.
 
-ثم تجربة الرفع من الجوال مرة ثانية.
+## 5. صفحة الرفع (`/`) — زر تعبئة تلقائية
+
+نضيف زر "Fill demo data" يعبّي:
+- اسم/إيميل/تلفون عميل وهمي
+- 3 صور placeholder كملفات للـ registration / license / emirates
+- agent_id افتراضي = A001
+عشان أي حدا يعمل submit بضغطة واحدة ويشوف النتيجة على dashboard.
+
+## 6. Demo Banner + Reset
+
+- Banner ثابت أعلى كل صفحة: "Demo Mode — data is stored locally on this browser"
+- زر "Reset Demo Data" في الـ DashboardShell (header) يعيد كل البيانات للـ seed الأصلي
+- زر اختيار اللغة بقي زي ما هو
+
+## 7. Branding Generic
+
+- استبدال "Al Rahaib" / "AIB" بـ "DocFlow Demo" بكل النصوص و translations
+- استبدال اللوغو بأيقونة عامة (Lucide `FileCheck2` مثلاً)
+- إزالة أي references لـ insurance-specific copy لو فيه (الإبقاء على المعنى العام: insurance documents flow)
+
+## 8. تنظيف ملفات أخرى
+
+- إزالة `auth-middleware.ts`, `client.server.ts` imports
+- تنظيف `package.json` من dependencies غير المستخدمة (Supabase, إلخ) — اختياري
+- مسح `.env` للقيم Supabase (تبقى الملف فاضي)
+- حذف ملفات الـ migrations في `supabase/migrations/`
+
+## النتيجة
+
+- يفتح أي حدا الرابط → يلاقي banner + 3 أزرار دخول
+- يدخل بأي دور → يشوف dashboard مع بيانات seed
+- يفتح Tab/متصفح ثاني (نفس الجهاز) → نفس الداتا
+- يفتح من تلفون مختلف → بيانات seed نضيفة (لأن لكل جهاز localStorage مستقل) — هذا مطلوب حسب اختيارك "لوكال 100%"
+- زر Reset يرجّع كل شيء
+
+## ملاحظة مهمة
+
+اختيارك "لوكال 100%" يعني: لو رفعت طلب من اللابتوب، **لن يظهر** على التلفون لأن localStorage مش مشترك بين الأجهزة. الطريقة الوحيدة لمشاركة نفس البيانات بين الأجهزة هي backend. لو لاحقاً بدك "نفس الداتا تظهر على التلفون لما ترفع من اللابتوب"، رجعلي وبنفعّل الخيار الثاني (Lovable Cloud).

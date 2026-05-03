@@ -7,7 +7,6 @@
  */
 
 import {
-  ensureSeededViaPublicCall,
   fileToDataUrl,
   getAgents as dsGetAgents,
   getAudit, setAudit,

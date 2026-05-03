@@ -24,14 +24,15 @@ export const Route = createFileRoute("/api/public/resolve-agent")({
         }
         try {
           const r = await fetch(
-            `${DIRECTUS}/users?filter[agent_id][_eq]=${encodeURIComponent(agentId)}&fields=id,first_name,last_name,email,agent_id,branch&limit=1`,
+            `${DIRECTUS}/users?filter[agent_id][_eq]=${encodeURIComponent(agentId)}&fields=id,first_name,last_name,agent_id,branch&limit=1`,
             { headers: { Authorization: `Bearer ${token}` } },
           );
           if (!r.ok) return Response.json({ ok: false, error: "lookup failed" }, { status: 502 });
           const j = (await r.json()) as { data?: any[] };
           const u = j.data?.[0];
           if (!u) return Response.json({ ok: true, found: false });
-          const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || u.email || agentId;
+          // SECURITY: never fall back to email — would leak agent email to anonymous callers.
+          const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || agentId;
           return Response.json(
             { ok: true, found: true, agent_id: u.agent_id, name, branch: u.branch ?? "" },
             { headers: { "cache-control": "no-store" } },

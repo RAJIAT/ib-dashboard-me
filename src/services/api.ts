@@ -26,9 +26,8 @@ import {
   type DemoUser,
 } from "./demoStore";
 
-// Workaround: re-export demoStore's seeding side-effect by calling any getter.
-// (kept as a no-op placeholder so future edits stay clean)
-export function ensureSeeded() { ensureSeededViaPublicCall?.(); }
+// Trigger seeding by accessing the store once.
+export function ensureSeeded() { getUsers(); }
 
 // ---------------------------------------------------------------------------
 // Public types — kept stable for the rest of the app.

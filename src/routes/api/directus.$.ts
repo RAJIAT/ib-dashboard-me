@@ -289,6 +289,18 @@ async function runDirectusMaintenance() {
       { id: { _eq: "$CURRENT_USER" } },
     );
 
+    // Agents must be able to read the basic file metadata they just uploaded.
+    // Otherwise POST /files returns the new row but the policy strips the
+    // response, which Directus surfaces as "You don't have permission to
+    // access fields ... in collection directus_files" on the upload itself.
+    await ensurePermission(agentPolicy.id, "directus_files", "create");
+    await upsertPermission(
+      agentPolicy.id,
+      "directus_files",
+      "read",
+      ["id", "storage", "filename_disk", "filename_download", "title", "type", "filesize", "uploaded_by"],
+    );
+
     // Security hardening: agents must NOT be able to update / delete /
     // create users. Remove any stray write permissions left over from
     // earlier configurations.

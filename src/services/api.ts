@@ -427,10 +427,24 @@ async function uploadFirst(files: File[]): Promise<string | null> {
   return await dxUploadFile(prepared);
 }
 
+async function uploadFirstPublic(files: File[]): Promise<string | null> {
+  const f = files[0];
+  if (!f) return null;
+  const { prepareForUpload } = await import("@/lib/imagePrep");
+  const prepared = await prepareForUpload(f);
+  return dxUploadFile(prepared, { auth: false });
+}
+
 async function uploadPrepared(file: File): Promise<string> {
   const { prepareForUpload } = await import("@/lib/imagePrep");
   const prepared = await prepareForUpload(file);
   return dxUploadFile(prepared);
+}
+
+async function uploadPreparedPublic(file: File): Promise<string> {
+  const { prepareForUpload } = await import("@/lib/imagePrep");
+  const prepared = await prepareForUpload(file);
+  return dxUploadFile(prepared, { auth: false });
 }
 
 export async function submitUpload(input: {
@@ -450,12 +464,12 @@ export async function submitUpload(input: {
   // Upload "front" file for the three doc types — Directus stores one file id
   // per slot in the request row; the rest go into the *_attachments tables.
   const [registration, license, emirates] = await Promise.all([
-    uploadFirst(input.images.registration),
-    uploadFirst(input.images.license),
-    uploadFirst(input.images.emirates),
+    uploadFirstPublic(input.images.registration),
+    uploadFirstPublic(input.images.license),
+    uploadFirstPublic(input.images.emirates),
   ]);
   const inspection = input.optional?.inspection
-    ? await uploadPrepared(input.optional.inspection)
+    ? await uploadPreparedPublic(input.optional.inspection)
     : null;
 
   // Resolve agent's branch + display name. Try the local cache first (fast path
@@ -494,30 +508,30 @@ export async function submitUpload(input: {
     customer_name: input.customerName,
     customer_email: input.customerEmail,
     customer_phone: input.customerPhone,
-  });
+  }, { auth: false });
   const reqId = String(created.id);
 
   // Vehicle media (mixed images + videos).
   for (const f of input.images.vehicleMedia) {
     try {
-      const fileId = await uploadPrepared(f);
+      const fileId = await uploadPreparedPublic(f);
       await dxCreateVehicleMedia({
         request: reqId,
         file: fileId,
         kind: f.type.startsWith("video/") ? "video" : "image",
-      });
+      }, { auth: false });
     } catch (e) { console.error("vehicle media upload failed", e); }
   }
 
   // Free-form attachments.
   for (const f of input.images.attachments ?? []) {
     try {
-      const fileId = await uploadPrepared(f);
+      const fileId = await uploadPreparedPublic(f);
       await dxCreateAttachment({
         request: reqId,
         file: fileId,
         original_name: f.name,
-      }, false);
+      }, false, { auth: false });
     } catch (e) { console.error("attachment upload failed", e); }
   }
 
@@ -529,12 +543,12 @@ export async function submitUpload(input: {
   ];
   for (const f of extras) {
     try {
-      const fileId = await uploadPrepared(f);
+      const fileId = await uploadPreparedPublic(f);
       await dxCreateAttachment({
         request: reqId,
         file: fileId,
         original_name: f.name,
-      }, false);
+      }, false, { auth: false });
     } catch (e) { console.error("extra page upload failed", e); }
   }
 

@@ -29,6 +29,7 @@ const TOKEN_KEY = "aib_directus_token";
 const REFRESH_KEY = "aib_directus_refresh";
 
 type TokenBundle = { access_token: string; refresh_token: string; expires: number };
+type DxFetchOptions = { auth?: boolean };
 
 function readToken(): TokenBundle | null {
   if (typeof window === "undefined") return null;
@@ -80,7 +81,7 @@ async function refreshIfNeeded(): Promise<string | null> {
   }
 }
 
-export async function dxFetch(path: string, init: RequestInit = {}, opts?: { auth?: boolean }) {
+export async function dxFetch(path: string, init: RequestInit = {}, opts?: DxFetchOptions) {
   if (!DIRECTUS_URL) throw new Error("Directus URL not configured");
   const headers = new Headers(init.headers);
   if (opts?.auth !== false) {
@@ -194,7 +195,7 @@ function safeApiErrorMessage(status: number): string {
 }
 
 // ---------- Files ----------
-export async function dxUploadFile(file: File): Promise<string> {
+export async function dxUploadFile(file: File, opts?: DxFetchOptions): Promise<string> {
   const fd = new FormData();
   fd.append("file", file, file.name);
   // Ask Directus to return only `id` — otherwise it tries to return all file
@@ -202,7 +203,7 @@ export async function dxUploadFile(file: File): Promise<string> {
   // Supervisor policies don't have read access to those, which makes the
   // upload itself fail with a permission error even though the file was
   // saved successfully.
-  const json = await dxFetch("/files?fields=id", { method: "POST", body: fd });
+  const json = await dxFetch("/files?fields=id", { method: "POST", body: fd }, opts);
   return json.data.id as string;
 }
 
@@ -301,14 +302,14 @@ export async function dxCreateRequest(input: {
   customer_name?: string | null;
   customer_email?: string | null;
   customer_phone?: string | null;
-}): Promise<DxRequest> {
-  // We always set status=new on creation. We do NOT pass auth:false anymore —
-  // the customer-facing /api/directus proxy sends a public-policy bearer token
-  // upstream when the route is unauthenticated.
+}, opts?: DxFetchOptions): Promise<DxRequest> {
+  // We always set status=new on creation. Public customer-link submissions pass
+  // auth:false so an existing Agent/Supervisor session on the same phone cannot
+  // accidentally bypass the proxy's anonymous customer flow.
   const json = await dxFetch("/items/requests", {
     method: "POST",
     body: JSON.stringify({ ...input, status: "new" }),
-  });
+  }, opts);
   return json.data as DxRequest;
 }
 
@@ -459,12 +460,13 @@ export async function dxCreateAttachment(
     original_name?: string;
   },
   missing = false,
+  opts?: DxFetchOptions,
 ): Promise<DxAttachment> {
   const collection = missing ? "request_missing_attachments" : "request_attachments";
   const json = await dxFetch(`/items/${collection}`, {
     method: "POST",
     body: JSON.stringify(input),
-  });
+  }, opts);
   return json.data as DxAttachment;
 }
 
@@ -492,11 +494,11 @@ export async function dxCreateVehicleMedia(input: {
   request: string;
   file: string;
   kind: "image" | "video";
-}): Promise<DxVehicleMedia> {
+}, opts?: DxFetchOptions): Promise<DxVehicleMedia> {
   const json = await dxFetch("/items/request_vehicle_media", {
     method: "POST",
     body: JSON.stringify(input),
-  });
+  }, opts);
   return json.data as DxVehicleMedia;
 }
 

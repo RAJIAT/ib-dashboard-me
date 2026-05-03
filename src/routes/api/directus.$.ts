@@ -679,8 +679,12 @@ async function validateAnonymousFileUpload(
         foundFile = true;
         const f = value as File;
         const mime = (f.type || "").toLowerCase();
-        if (!FILE_MIME_WHITELIST.has(mime)) {
-          return { ok: false, status: 415, error: `Unsupported file type: ${mime || "unknown"}` };
+        const name = (f.name || "").toLowerCase();
+        const extOk = /\.(jpe?g|png|webp|heic|heif|pdf|mp4|mov|m4v|3gp)$/i.test(name);
+        // iOS Safari sometimes sends an empty MIME type. Accept the file if the
+        // filename has a known extension OR if the MIME is whitelisted.
+        if (!FILE_MIME_WHITELIST.has(mime) && !(mime === "" && extOk)) {
+          return { ok: false, status: 415, error: `Unsupported file type: ${mime || name || "unknown"}` };
         }
         if (f.size > FILE_MAX_BYTES) {
           return { ok: false, status: 413, error: "File too large" };

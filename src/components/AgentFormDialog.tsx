@@ -16,6 +16,7 @@ export type AgentFormValues = {
 
 export function AgentFormDialog({
   open, mode, initial, onClose, onSubmit, lockedBranch, lockedRole, defaultRole,
+  lockedStaffType, defaultStaffType,
 }: {
   open: boolean;
   mode: "create" | "edit";
@@ -27,12 +28,17 @@ export function AgentFormDialog({
   lockedRole?: AgentRole;
   /** Initial role for create mode (when lockedRole is not set). */
   defaultRole?: AgentRole;
+  /** When set, hides the staffType selector and forces this value (for role=agent). */
+  lockedStaffType?: StaffType;
+  /** Initial staffType for create mode. */
+  defaultStaffType?: StaffType;
 }) {
   const { t, dir } = useLang();
   const [values, setValues] = useState<AgentFormValues>({
     name: "", email: "", password: "", agentId: "",
     branch: listBranches()[0] ?? "",
     role: lockedRole ?? defaultRole ?? "agent",
+    staffType: lockedStaffType ?? defaultStaffType ?? "underwriter",
     supervisorId: "",
   });
   const [error, setError] = useState("");
@@ -45,7 +51,6 @@ export function AgentFormDialog({
   useEffect(() => {
     if (!open) return;
     setError("");
-    // Refresh branches when dialog opens so the dropdown is never empty.
     getBranches().then(() => setBranches(listBranches())).catch(() => {});
     setValues({
       name: initial?.name ?? "",
@@ -54,9 +59,10 @@ export function AgentFormDialog({
       agentId: initial?.id ?? "",
       branch: lockedBranch ?? initial?.branch ?? (listBranches()[0] ?? ""),
       role: lockedRole ?? initial?.role ?? defaultRole ?? "agent",
+      staffType: lockedStaffType ?? initial?.staffType ?? defaultStaffType ?? "underwriter",
       supervisorId: initial?.supervisorId ?? "",
     });
-  }, [open, initial, lockedBranch, lockedRole, defaultRole]);
+  }, [open, initial, lockedBranch, lockedRole, defaultRole, lockedStaffType, defaultStaffType]);
 
   if (!open) return null;
 

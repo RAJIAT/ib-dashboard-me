@@ -139,6 +139,19 @@ export function AgentFormDialog({
             </Field>
           )}
 
+          {(lockedRole ?? values.role) === "agent" && !lockedStaffType && (
+            <Field label={t.agents.staffType ?? "Type"}>
+              <select
+                value={values.staffType ?? "underwriter"}
+                onChange={(e) => setValues((v) => ({ ...v, staffType: e.target.value as StaffType }))}
+                className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground"
+              >
+                <option value="underwriter">{t.agents.roleUnderwriter ?? "Underwriter"}</option>
+                <option value="sales">{t.agents.roleSales ?? "Sales"}</option>
+              </select>
+            </Field>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t.agents.email}>
               <input

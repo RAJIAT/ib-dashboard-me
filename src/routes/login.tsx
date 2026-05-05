@@ -96,15 +96,15 @@ function LoginPage() {
 
         <div className="mt-6 rounded-2xl border border-dashed border-border bg-card p-4">
           <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            One-click demo login
+            {t.agents.quickLoginTitle}
           </p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {(
               [
-                { label: "Admin", email: "admin@demo.com" },
-                { label: "Supervisor", email: "supervisor@demo.com" },
-                { label: "Underwriter", email: "underwriter@demo.com" },
-                { label: "Sales", email: "sales@demo.com" },
+                { label: t.agents.quickAdmin, email: "admin@demo.com" },
+                { label: t.agents.quickSupervisor, email: "supervisor@demo.com" },
+                { label: t.agents.quickUnderwriter, email: "underwriter@demo.com" },
+                { label: t.agents.quickSales, email: "sales@demo.com" },
               ] as const
             ).map((q) => (
               <button

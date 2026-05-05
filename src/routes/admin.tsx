@@ -244,7 +244,7 @@ function AdminDashboard() {
                     <div>{r.agentName}</div>
                     {!isSupervisor && supervisorByAgentId.get(r.agentId) && (
                       <div className="mt-0.5 text-xs text-muted-foreground">
-                        {lang === "ar" ? "السوبرفايزر: " : "Supervisor: "}
+                        {t.agents.supervisorPrefix}
                         {supervisorByAgentId.get(r.agentId)}
                       </div>
                     )}

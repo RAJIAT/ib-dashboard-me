@@ -16,25 +16,27 @@ export const Route = createFileRoute("/audit")({
   component: AuditPage,
 });
 
-const ACTION_FILTERS: Array<{ value: "" | AuditAction; label: string }> = [
-  { value: "", label: "All actions" },
-  { value: "request.status_changed", label: "Request: status changed" },
-  { value: "agent.created", label: "User: created" },
-  { value: "agent.pending_created", label: "User: pending approval" },
-  { value: "agent.approved", label: "User: approved" },
-  { value: "agent.updated", label: "User: updated" },
-  { value: "agent.deleted", label: "User: deleted" },
-  { value: "settings.approval_changed", label: "Settings: approval toggle" },
-  { value: "auth.login", label: "Auth: login" },
-  { value: "auth.logout", label: "Auth: logout" },
-];
-
-const ENTITY_FILTERS: Array<{ value: "" | AuditEntityType; label: string }> = [
-  { value: "", label: "All entities" },
-  { value: "request", label: "Requests" },
-  { value: "agent", label: "Agents" },
-  { value: "auth", label: "Auth" },
-];
+function useFilterOptions(t: ReturnType<typeof useLang>["t"]) {
+  const ACTION_FILTERS: Array<{ value: "" | AuditAction; label: string }> = [
+    { value: "", label: t.audit.filterAllActions },
+    { value: "request.status_changed", label: t.audit.actionRequestStatus },
+    { value: "agent.created", label: t.audit.actionUserCreated },
+    { value: "agent.pending_created", label: t.audit.actionUserPending },
+    { value: "agent.approved", label: t.audit.actionUserApproved },
+    { value: "agent.updated", label: t.audit.actionUserUpdated },
+    { value: "agent.deleted", label: t.audit.actionUserDeleted },
+    { value: "settings.approval_changed", label: t.audit.actionApprovalToggle },
+    { value: "auth.login", label: t.audit.actionAuthLogin },
+    { value: "auth.logout", label: t.audit.actionAuthLogout },
+  ];
+  const ENTITY_FILTERS: Array<{ value: "" | AuditEntityType; label: string }> = [
+    { value: "", label: t.audit.filterAllEntities },
+    { value: "request", label: t.audit.entityRequests },
+    { value: "agent", label: t.audit.entityAgents },
+    { value: "auth", label: t.audit.entityAuth },
+  ];
+  return { ACTION_FILTERS, ENTITY_FILTERS };
+}
 
 function AuditPage() {
   const { dir, t } = useLang();

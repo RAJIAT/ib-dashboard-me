@@ -37,7 +37,13 @@ function AdminDashboard() {
 
   // Stable agents/branches snapshot — refreshed only on subscription change.
   const [agents, setAgents] = useState<Agent[]>(() => listAgents());
+  const [approvalReq, setApprovalReq] = useState<boolean>(() => getApprovalRequired());
   const allBranches = useMemo(() => listBranches(), []);
+  useEffect(() => {
+    const off = subscribeSettings(() => setApprovalReq(getApprovalRequired()));
+    return () => off();
+  }, []);
+  const pendingCount = useMemo(() => agents.filter((a) => a.pendingApproval).length, [agents]);
   const branches = useMemo(
     () => (isSupervisor && lockedBranch ? [lockedBranch] : allBranches),
     [isSupervisor, lockedBranch, allBranches],

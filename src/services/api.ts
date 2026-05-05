@@ -42,6 +42,7 @@ export type AttachmentMeta = DemoAttachment;
 export type InsuranceRequest = DemoRequest;
 export type Role = "agent" | "admin" | "supervisor";
 export type AgentRole = "agent" | "supervisor";
+export type StaffType = DemoStaffType;
 
 export type AuthUser = {
   id: string;
@@ -60,13 +61,28 @@ export type Agent = {
   branch?: string;
   active: boolean;
   role?: AgentRole;
+  staffType?: StaffType;
   supervisorId?: string;
+  createdByUserId?: string;
+  createdByRole?: Role;
+  pendingApproval?: boolean;
 };
 
 export function canDelete(u: AuthUser | null | undefined) { return u?.role === "admin"; }
 export function canManageAgents(u: AuthUser | null | undefined) { return u?.role === "admin" || u?.role === "supervisor"; }
 export function canDeleteAgents(u: AuthUser | null | undefined) { return u?.role === "admin"; }
 export function canSeeAllBranches(u: AuthUser | null | undefined) { return u?.role === "admin"; }
+
+// Settings
+export function getApprovalRequired(): boolean { return getSettings().requireAdminApproval; }
+export function setApprovalRequired(v: boolean) {
+  const before = getSettings().requireAdminApproval;
+  dsSetSettings({ requireAdminApproval: v });
+  if (before !== v) {
+    logEvent({ action: "settings.approval_changed", entityType: "auth", entityId: null, entityLabel: "settings", before: { requireAdminApproval: before }, after: { requireAdminApproval: v } });
+  }
+}
+export { subscribeSettings } from "./demoStore";
 
 // Asset URL helpers — in demo mode every asset is a data URL.
 export function dxAssetUrl(s: string) { return s; }

@@ -44,6 +44,23 @@ export type DemoAgent = {
   createdByUserId?: string;
   createdByRole?: DemoRole;
   pendingApproval?: boolean;
+  removalRequest?: {
+    requestedByUserId: string;
+    requestedByName: string;
+    reason: string;
+    requestedAt: string;
+  };
+};
+
+export type DemoNotification = {
+  id: string;
+  recipientUserId: string;
+  title: string;
+  body?: string;
+  kind: "removal_requested" | "removal_approved" | "removal_dismissed" | "user_pending" | "user_approved" | "request_new" | "request_status" | "info";
+  link?: string;
+  read: boolean;
+  createdAt: string;
 };
 
 export type DemoNote = {

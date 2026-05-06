@@ -110,7 +110,10 @@ export function DashboardShell({
               </button>
               <h1 className="text-lg font-bold text-foreground">{title ?? t.nav.dashboard}</h1>
             </div>
-            <LanguageSwitcher />
+            <div className="flex items-center gap-2">
+              <NotificationBell />
+              <LanguageSwitcher />
+            </div>
           </header>
           <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">{children}</main>
         </div>

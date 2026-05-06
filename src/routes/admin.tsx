@@ -46,6 +46,7 @@ function AdminDashboard() {
     return () => off();
   }, []);
   const pendingCount = useMemo(() => agents.filter((a) => a.pendingApproval).length, [agents]);
+  const pendingRemovals = useMemo(() => agents.filter((a) => a.removalRequest), [agents]);
   const branches = useMemo(
     () => (isSupervisor && lockedBranch ? [lockedBranch] : allBranches),
     [isSupervisor, lockedBranch, allBranches],

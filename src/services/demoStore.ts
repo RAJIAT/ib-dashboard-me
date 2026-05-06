@@ -254,10 +254,67 @@ function seedRequests(): DemoRequest[] {
       id: "REQ-1004", uuid: "req-1004",
       agentId: "SLS-001", agentName: "Ali Sales", branch: "Dubai",
       status: "reupload", createdAt: iso(60 * 6),
-      customerName: "Layla Ibrahim", customerEmail: "layla@example.com",
+      customerName: "Layla Ibrahim", customerEmail: "layla@example.com", customerPhone: "+971503456789",
       notes: [
         { id: "n2", authorId: "u-sls-1", authorName: "Ali Sales", authorRole: "agent", text: "Please send a clearer photo of the registration back.", kind: "missing", createdAt: iso(300) },
       ],
+      images: {
+        registration: [PLACEHOLDER_DOC], license: [PLACEHOLDER_DOC], emirates: [PLACEHOLDER_DOC],
+        vehicleMedia: [], attachments: [],
+      },
+    },
+    {
+      id: "REQ-1005", uuid: "req-1005",
+      agentId: "SLS-001", agentName: "Ali Sales", branch: "Dubai",
+      status: "new", createdAt: iso(25),
+      customerName: "Hassan Al Marri", customerEmail: "hassan@example.com", customerPhone: "+971504567890",
+      notes: [],
+      images: {
+        registration: [PLACEHOLDER_DOC], license: [PLACEHOLDER_DOC], emirates: [PLACEHOLDER_DOC],
+        vehicleMedia: [{ kind: "image", url: PLACEHOLDER_CAR }], attachments: [],
+      },
+    },
+    {
+      id: "REQ-1006", uuid: "req-1006",
+      agentId: "SLS-001", agentName: "Ali Sales", branch: "Dubai",
+      status: "processing", createdAt: iso(60 * 3),
+      customerName: "Mariam Saleh", customerEmail: "mariam@example.com", customerPhone: "+971505678901",
+      notes: [
+        { id: "n3", authorId: "u-uw-1", authorName: "Omar Underwriter", authorRole: "agent", text: "Working on the quote.", kind: "comment", createdAt: iso(60) },
+      ],
+      images: {
+        registration: [PLACEHOLDER_DOC], license: [PLACEHOLDER_DOC], emirates: [PLACEHOLDER_DOC],
+        vehicleMedia: [{ kind: "image", url: PLACEHOLDER_CAR }], attachments: [],
+      },
+    },
+    {
+      id: "REQ-1007", uuid: "req-1007",
+      agentId: "SLS-001", agentName: "Ali Sales", branch: "Dubai",
+      status: "sold", createdAt: iso(60 * 48),
+      customerName: "Yousef Karim", customerEmail: "yousef@example.com", customerPhone: "+971506789012",
+      notes: [],
+      images: {
+        registration: [PLACEHOLDER_DOC], license: [PLACEHOLDER_DOC], emirates: [PLACEHOLDER_DOC],
+        vehicleMedia: [], attachments: [],
+      },
+    },
+    {
+      id: "REQ-1008", uuid: "req-1008",
+      agentId: "SLS-001", agentName: "Ali Sales", branch: "Dubai",
+      status: "linkSent", createdAt: iso(60 * 2),
+      customerName: "Aisha Khalifa", customerEmail: "aisha@example.com", customerPhone: "+971507890123",
+      notes: [],
+      images: {
+        registration: [PLACEHOLDER_DOC], license: [PLACEHOLDER_DOC], emirates: [PLACEHOLDER_DOC],
+        vehicleMedia: [], attachments: [],
+      },
+    },
+    {
+      id: "REQ-1009", uuid: "req-1009",
+      agentId: "SLS-002", agentName: "Noor Sales", branch: "Dubai",
+      status: "new", createdAt: iso(45),
+      customerName: "Tariq Hamdan", customerEmail: "tariq@example.com", customerPhone: "+971508901234",
+      notes: [],
       images: {
         registration: [PLACEHOLDER_DOC], license: [PLACEHOLDER_DOC], emirates: [PLACEHOLDER_DOC],
         vehicleMedia: [], attachments: [],

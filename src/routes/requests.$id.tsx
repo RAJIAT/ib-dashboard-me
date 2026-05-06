@@ -492,6 +492,9 @@ function RequestDetails() {
           {/* Reassign */}
           <ReassignCard req={req} user={user} onReassigned={(r) => setReq(r)} />
 
+          {/* Quotes (underwriter uploads, sales shares with customer) */}
+          <QuotesCard req={req} user={user} onUpdated={(r) => setReq(r)} />
+
           {/* Actions */}
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <button

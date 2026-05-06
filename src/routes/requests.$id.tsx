@@ -10,7 +10,8 @@ import { isPdfDataUrl } from "@/lib/imageUtils";
 import {
   getCurrentUser, refreshCurrentUser, getRequest, updateRequestStatus, resolveAssetUrl,
   addRequestNote, resolveRequestNote, subscribeRequests,
-  type AuthUser, type InsuranceRequest, type RequestStatus, type RequestNoteKind,
+  reassignRequest, listAgents,
+  type AuthUser, type InsuranceRequest, type RequestStatus, type RequestNoteKind, type Agent,
 } from "@/services/api";
 import { isDirectusAssetUrl } from "@/services/directus";
 

@@ -1,16 +1,19 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Pencil, Plus, Power, Trash2, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Pencil, Plus, Power, Send, Trash2, Upload, Users } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/DashboardShell";
 import { EmptyState } from "@/components/EmptyState";
 import { AgentFormDialog, type AgentFormValues } from "@/components/AgentFormDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { RemovalRequestDialog } from "@/components/RemovalRequestDialog";
+import { ImportUsersDialog } from "@/components/ImportUsersDialog";
 import { useLang } from "@/i18n/LanguageProvider";
 import {
   approveAgent,
   canDeleteAgents,
   createAgent, deleteAgent, getAgents, getBranches, getCurrentUser, listBranches, refreshCurrentUser,
+  requestAgentRemoval,
   subscribeAgents, updateAgent, type Agent, type AgentRole, type AuthUser, type StaffType,
 } from "@/services/api";
 

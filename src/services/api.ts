@@ -220,6 +220,7 @@ export async function updateRequestStatus(id: string, status: RequestStatus): Pr
   setRequests(next);
   if (before !== status) {
     logEvent({ action: "request.status_changed", entityType: "request", entityId: next[idx].id, entityLabel: next[idx].id, branch: next[idx].branch, before: { status: before }, after: { status } });
+    notifyRequestStatus(next[idx], before);
   }
   return next[idx];
 }

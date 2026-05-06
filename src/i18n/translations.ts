@@ -721,6 +721,11 @@ export const translations = {
       importErrorBranchRequired: "Please pick a branch first",
       importErrorNoRows: "File contains no valid rows",
     },
+    notifications: {
+      title: "Notifications",
+      empty: "No notifications yet.",
+      markAllRead: "Mark all read",
+    },
     chat: {
       title: "Chats",
       noThreads: "No conversations yet",

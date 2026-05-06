@@ -489,6 +489,14 @@ export async function approveAgent(id: string): Promise<Agent> {
   next[idx] = { ...list[idx], active: true, pendingApproval: undefined };
   dsSetAgents(next);
   logEvent({ action: "agent.approved", entityType: "agent", entityId: next[idx].id, entityLabel: next[idx].name, branch: next[idx].branch });
+  if (next[idx].createdByUserId) {
+    pushNotifications([{
+      recipientUserId: next[idx].createdByUserId!,
+      title: `User approved: ${next[idx].name}`,
+      kind: "user_approved",
+      link: "/agents",
+    }]);
+  }
   return dsToAgent(next[idx]);
 }
 

@@ -972,18 +972,85 @@ function ReassignCard({
     }
   };
 
+  const meAgent = agents.find((a) => a.id === user.agentId);
+  const myType = meAgent?.staffType;
+  const currentOwner = agents.find((a) => a.id === req.agentId);
+  const ownerType = currentOwner?.staffType;
+  const underwriters = candidates.filter((a) => a.staffType === "underwriter");
+  const originSales = req.originAgentId && req.originAgentId !== req.agentId
+    ? agents.find((a) => a.id === req.originAgentId && a.active)
+    : undefined;
+
+  const doReassign = async (targetId: string, label: string) => {
+    if (!targetId || busy) return;
+    setBusy(true);
+    try {
+      const updated = await reassignRequest(req.id, targetId);
+      onReassigned(updated);
+      toast.success(label);
+      setTarget("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Quick action: sales → first underwriter in branch
+  const showSendToUW = (isOwner && myType === "sales" && underwriters.length > 0)
+    || (!isOwner && (isAdmin || isBranchSup) && ownerType === "sales" && underwriters.length > 0);
+  // Quick action: underwriter → return to origin sales
+  const showReturnToSales = (isOwner && myType === "underwriter" && !!originSales)
+    || (!isOwner && (isAdmin || isBranchSup) && ownerType === "underwriter" && !!originSales);
+
   return (
     <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
       <h3 className="mb-3 text-sm font-bold text-foreground">
-        {lang === "ar" ? "نقل الطلب لموظف آخر" : "Reassign to another agent"}
+        {lang === "ar" ? "تحويل الطلب" : "Transfer request"}
       </h3>
+
+      {(showSendToUW || showReturnToSales) && (
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          {showSendToUW && (
+            <button
+              onClick={() => doReassign(
+                underwriters[0].id,
+                lang === "ar" ? "تم الإرسال للأندررايتر" : "Sent to underwriter",
+              )}
+              disabled={busy}
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95 disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {lang === "ar"
+                ? `إرسال للأندررايتر (${underwriters[0].name})`
+                : `Send to underwriter (${underwriters[0].name})`}
+            </button>
+          )}
+          {showReturnToSales && originSales && (
+            <button
+              onClick={() => doReassign(
+                originSales.id,
+                lang === "ar" ? "تم إرجاع الطلب للسيلز" : "Returned to sales",
+              )}
+              disabled={busy}
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-success px-4 text-sm font-semibold text-success-foreground shadow-soft transition active:scale-95 disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {lang === "ar"
+                ? `إرجاع للسيلز (${originSales.name})`
+                : `Return to sales (${originSales.name})`}
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <select
           value={target}
           onChange={(e) => setTarget(e.target.value)}
           className="h-10 flex-1 rounded-xl border border-input bg-surface px-3 text-sm font-medium text-foreground"
         >
-          <option value="">{lang === "ar" ? "اختر موظفاً" : "Pick an agent"}</option>
+          <option value="">{lang === "ar" ? "أو اختر موظفاً آخر…" : "Or pick another agent…"}</option>
           {candidates.map((a) => (
             <option key={a.id} value={a.id}>
               {a.name} · {a.id} ({a.staffType ?? "agent"})
@@ -991,12 +1058,12 @@ function ReassignCard({
           ))}
         </select>
         <button
-          onClick={submit}
+          onClick={() => doReassign(target, lang === "ar" ? "تم نقل الطلب" : "Request reassigned")}
           disabled={!target || busy}
-          className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95 disabled:opacity-50"
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground transition hover:bg-muted active:scale-95 disabled:opacity-50"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          {lang === "ar" ? "نقل" : "Reassign"}
+          {lang === "ar" ? "نقل" : "Transfer"}
         </button>
       </div>
     </section>

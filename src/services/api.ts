@@ -273,6 +273,8 @@ export async function submitUpload(input: {
   };
   setRequests([req, ...getRequests()]);
   logEvent({ action: "request.created", entityType: "request", entityId: id, entityLabel: id, branch: req.branch });
+  // Notify supervisor + admins of the new request
+  notifyNewRequest(req);
   return { id };
 }
 

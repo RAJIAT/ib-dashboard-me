@@ -164,7 +164,8 @@ function AdminAgents() {
       ? (dialog.target?.staffType)
       : (effectiveTab === "underwriter" ? "underwriter" : effectiveTab === "sales" ? "sales" : undefined);
 
-  const isAdminCreated = (a: Agent) => a.createdByRole === "admin" && isSupervisor;
+  // Supervisors must always request removal from the admin — even for users they created.
+  const isAdminCreated = (_a: Agent) => isSupervisor;
 
   return (
     <DashboardShell role={["admin", "supervisor"]} title={isSupervisor ? t.agents.titleAgentsOnly : t.agents.title}>

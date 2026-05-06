@@ -263,6 +263,8 @@ export async function submitUpload(input: {
     id, uuid: id.toLowerCase(),
     agentId: input.agentId,
     agentName: agent?.name ?? input.agentId,
+    originAgentId: input.agentId,
+    originAgentName: agent?.name ?? input.agentId,
     branch: agent?.branch ?? "",
     status: "new",
     createdAt: new Date().toISOString(),

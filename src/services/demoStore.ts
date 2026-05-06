@@ -131,7 +131,8 @@ const KEY = {
   audit: "demo:audit",
   seq: "demo:seq",
   settings: "demo:settings",
-  seeded: "demo:seeded:v2",
+  notifications: "demo:notifications",
+  seeded: "demo:seeded:v3",
 };
 
 // ---------- Seed data ----------

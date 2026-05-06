@@ -1,16 +1,19 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Pencil, Plus, Power, Trash2, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Pencil, Plus, Power, Send, Trash2, Upload, Users } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/DashboardShell";
 import { EmptyState } from "@/components/EmptyState";
 import { AgentFormDialog, type AgentFormValues } from "@/components/AgentFormDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { RemovalRequestDialog } from "@/components/RemovalRequestDialog";
+import { ImportUsersDialog } from "@/components/ImportUsersDialog";
 import { useLang } from "@/i18n/LanguageProvider";
 import {
   approveAgent,
   canDeleteAgents,
   createAgent, deleteAgent, getAgents, getBranches, getCurrentUser, listBranches, refreshCurrentUser,
+  requestAgentRemoval,
   subscribeAgents, updateAgent, type Agent, type AgentRole, type AuthUser, type StaffType,
 } from "@/services/api";
 
@@ -32,6 +35,8 @@ function AdminAgents() {
     open: false, mode: "create",
   });
   const [confirmTarget, setConfirmTarget] = useState<Agent | null>(null);
+  const [removalTarget, setRemovalTarget] = useState<Agent | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const Back = dir === "rtl" ? ArrowRight : ArrowLeft;
 
   const isSupervisor = user?.role === "supervisor";
@@ -174,13 +179,24 @@ function AdminAgents() {
           </Link>
           <p className="hidden text-sm text-muted-foreground sm:block">{t.agents.subtitle}</p>
         </div>
-        <button
-          onClick={() => setDialog({ open: true, mode: "create" })}
-          className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95"
-        >
-          <Plus className="h-4 w-4" />
-          {cur.addLabel}
-        </button>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              onClick={() => setImportOpen(true)}
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground hover:bg-muted"
+            >
+              <Upload className="h-4 w-4" />
+              {t.agents.importExcel}
+            </button>
+          )}
+          <button
+            onClick={() => setDialog({ open: true, mode: "create" })}
+            className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95"
+          >
+            <Plus className="h-4 w-4" />
+            {cur.addLabel}
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -280,9 +296,15 @@ function AdminAgents() {
                         <Trash2 className="h-4 w-4" />
                       </IconBtn>
                     ) : isAdminCreated(a) ? (
-                      <IconBtn danger disabledLook label={t.agents.noDeleteAdminCreated} onClick={() => toast.error(t.agents.noDeleteAdminCreated)}>
-                        <Trash2 className="h-4 w-4" />
-                      </IconBtn>
+                      a.removalRequest ? (
+                        <IconBtn danger disabledLook label={t.agents.removalAlreadyRequested} onClick={() => toast.message(t.agents.removalAlreadyRequested)}>
+                          <Send className="h-4 w-4" />
+                        </IconBtn>
+                      ) : (
+                        <IconBtn danger label={t.agents.requestRemoval} onClick={() => setRemovalTarget(a)}>
+                          <Send className="h-4 w-4" />
+                        </IconBtn>
+                      )
                     ) : canDelete || (isSupervisor && a.createdByUserId === user?.id) ? (
                       <IconBtn danger label={t.agents.delete} onClick={() => onDelete(a)}>
                         <Trash2 className="h-4 w-4" />
@@ -361,6 +383,23 @@ function AdminAgents() {
         onConfirm={confirmDelete}
         onClose={() => setConfirmTarget(null)}
       />
+
+      <RemovalRequestDialog
+        open={removalTarget !== null}
+        agentName={removalTarget?.name}
+        onClose={() => setRemovalTarget(null)}
+        onSubmit={async (reason) => {
+          if (!removalTarget) return;
+          try {
+            await requestAgentRemoval(removalTarget.id, reason);
+            toast.success(t.agents.removalSent);
+          } catch (e: any) {
+            toast.error(e?.message ?? t.agents.saveFailed);
+          }
+        }}
+      />
+
+      <ImportUsersDialog open={importOpen} onClose={() => setImportOpen(false)} />
     </DashboardShell>
   );
 }

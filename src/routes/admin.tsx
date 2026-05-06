@@ -7,11 +7,13 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useLang } from "@/i18n/LanguageProvider";
 import { useRequestsLive } from "@/hooks/useRequestsLive";
 import {
+  approveAgentRemoval, dismissAgentRemoval,
   getCurrentUser, refreshCurrentUser, listAgents, getAgents, listBranches,
   subscribeAgents, getApprovalRequired, setApprovalRequired, subscribeSettings,
   type Agent, type AuthUser, type RequestStatus,
 } from "@/services/api";
 import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin")({
   component: AdminDashboard,
@@ -44,6 +46,7 @@ function AdminDashboard() {
     return () => off();
   }, []);
   const pendingCount = useMemo(() => agents.filter((a) => a.pendingApproval).length, [agents]);
+  const pendingRemovals = useMemo(() => agents.filter((a) => a.removalRequest), [agents]);
   const branches = useMemo(
     () => (isSupervisor && lockedBranch ? [lockedBranch] : allBranches),
     [isSupervisor, lockedBranch, allBranches],
@@ -159,6 +162,42 @@ function AdminDashboard() {
             )}
           </div>
           <Switch checked={approvalReq} onCheckedChange={(v) => { setApprovalReq(v); setApprovalRequired(v); }} />
+        </div>
+      )}
+
+      {!isSupervisor && pendingRemovals.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-warning/40 bg-warning/5 p-4 shadow-card">
+          <div className="mb-3">
+            <div className="text-sm font-semibold text-foreground">{t.agents.pendingRemovalsTitle}</div>
+            <div className="text-xs text-muted-foreground">{t.agents.pendingRemovalsHint}</div>
+          </div>
+          <div className="space-y-2">
+            {pendingRemovals.map((a) => (
+              <div key={a.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border bg-card p-3">
+                <div className="min-w-0 text-sm">
+                  <div className="font-bold text-foreground">{a.name} <span className="text-xs font-normal text-muted-foreground">· {a.branch}</span></div>
+                  <div className="text-xs text-muted-foreground">
+                    {t.agents.requestedBy}: {a.removalRequest?.requestedByName} · {a.removalRequest && new Date(a.removalRequest.requestedAt).toLocaleString()}
+                  </div>
+                  <div className="mt-1 text-xs text-foreground"><b>{t.agents.reason}:</b> {a.removalRequest?.reason}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => { try { await dismissAgentRemoval(a.id); toast.success(t.agents.removalDismissed); } catch (e: any) { toast.error(e?.message); } }}
+                    className="h-9 rounded-lg border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:bg-muted"
+                  >
+                    {t.agents.removalDismiss}
+                  </button>
+                  <button
+                    onClick={async () => { try { await approveAgentRemoval(a.id); toast.success(t.agents.removalApproved); } catch (e: any) { toast.error(e?.message); } }}
+                    className="h-9 rounded-lg bg-destructive px-3 text-xs font-semibold text-destructive-foreground"
+                  >
+                    {t.agents.removalApprove}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

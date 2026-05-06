@@ -44,6 +44,23 @@ export type DemoAgent = {
   createdByUserId?: string;
   createdByRole?: DemoRole;
   pendingApproval?: boolean;
+  removalRequest?: {
+    requestedByUserId: string;
+    requestedByName: string;
+    reason: string;
+    requestedAt: string;
+  };
+};
+
+export type DemoNotification = {
+  id: string;
+  recipientUserId: string;
+  title: string;
+  body?: string;
+  kind: "removal_requested" | "removal_approved" | "removal_dismissed" | "user_pending" | "user_approved" | "request_new" | "request_status" | "info";
+  link?: string;
+  read: boolean;
+  createdAt: string;
 };
 
 export type DemoNote = {
@@ -114,7 +131,8 @@ const KEY = {
   audit: "demo:audit",
   seq: "demo:seq",
   settings: "demo:settings",
-  seeded: "demo:seeded:v2",
+  notifications: "demo:notifications",
+  seeded: "demo:seeded:v3",
 };
 
 // ---------- Seed data ----------
@@ -260,8 +278,8 @@ function ensureSeeded() {
   if (_seeded) return;
   if (typeof window === "undefined") return;
   if (localStorage.getItem(KEY.seeded)) { _seeded = true; return; }
-  // Clear any older seed
-  ["demo:seeded:v1"].forEach((k) => localStorage.removeItem(k));
+  // Clear older seeds
+  ["demo:seeded:v1", "demo:seeded:v2"].forEach((k) => localStorage.removeItem(k));
   write(KEY.users, seedUsers());
   write(KEY.branches, seedBranches());
   write(KEY.agents, seedAgents());
@@ -269,13 +287,14 @@ function ensureSeeded() {
   write(KEY.audit, [] as DemoAuditEntry[]);
   write(KEY.seq, 1005);
   write(KEY.settings, { requireAdminApproval: false } as DemoSettings);
+  write(KEY.notifications, [] as DemoNotification[]);
   localStorage.setItem(KEY.seeded, "1");
   _seeded = true;
 }
 
 export function resetDemo() {
   if (typeof window === "undefined") return;
-  [KEY.users, KEY.branches, KEY.agents, KEY.requests, KEY.audit, KEY.seq, KEY.settings, KEY.seeded].forEach((k) =>
+  [KEY.users, KEY.branches, KEY.agents, KEY.requests, KEY.audit, KEY.seq, KEY.settings, KEY.notifications, KEY.seeded].forEach((k) =>
     localStorage.removeItem(k),
   );
   _seeded = false;
@@ -284,6 +303,7 @@ export function resetDemo() {
   notify("agents");
   notify("branches");
   notify("audit");
+  notify("notifications");
 }
 
 const EVT: Record<string, string> = {
@@ -292,6 +312,7 @@ const EVT: Record<string, string> = {
   branches: "aib:branches-changed",
   audit: "aib:audit-changed",
   settings: "aib:settings-changed",
+  notifications: "aib:notifications-changed",
 };
 
 export function notify(kind: keyof typeof EVT) {
@@ -329,6 +350,33 @@ export function subscribeSettings(cb: () => void) {
   const fn = () => cb();
   window.addEventListener("aib:settings-changed", fn);
   return () => window.removeEventListener("aib:settings-changed", fn);
+}
+
+// ---------- Notifications ----------
+
+export function getNotifications(): DemoNotification[] {
+  ensureSeeded();
+  return read(KEY.notifications, [] as DemoNotification[]);
+}
+export function setNotifications(list: DemoNotification[]) {
+  write(KEY.notifications, list); notify("notifications");
+}
+export function subscribeNotifications(cb: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const fn = () => cb();
+  window.addEventListener("aib:notifications-changed", fn);
+  return () => window.removeEventListener("aib:notifications-changed", fn);
+}
+export function pushNotifications(items: Omit<DemoNotification, "id" | "read" | "createdAt">[]) {
+  if (items.length === 0) return;
+  const now = new Date().toISOString();
+  const next: DemoNotification[] = items.map((n) => ({
+    ...n,
+    id: crypto.randomUUID(),
+    read: false,
+    createdAt: now,
+  }));
+  setNotifications([...next, ...getNotifications()].slice(0, 200));
 }
 
 export function newRequestId(): string { return `REQ-${nextSeq()}`; }

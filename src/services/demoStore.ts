@@ -312,6 +312,7 @@ const EVT: Record<string, string> = {
   branches: "aib:branches-changed",
   audit: "aib:audit-changed",
   settings: "aib:settings-changed",
+  notifications: "aib:notifications-changed",
 };
 
 export function notify(kind: keyof typeof EVT) {

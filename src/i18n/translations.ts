@@ -319,6 +319,11 @@ export const translations = {
       importErrorBranchRequired: "يرجى اختيار الفرع أولاً",
       importErrorNoRows: "الملف لا يحتوي بيانات صالحة",
     },
+    notifications: {
+      title: "الإشعارات",
+      empty: "لا توجد إشعارات بعد.",
+      markAllRead: "تعليم الكل كمقروء",
+    },
     chat: {
       title: "المحادثات",
       noThreads: "لا توجد محادثات بعد",

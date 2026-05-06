@@ -506,8 +506,7 @@ export async function deleteAgent(id: string): Promise<void> {
   if (!before) throw new Error("Agent not found");
   const me = getCurrentUser();
   if (me?.role === "supervisor") {
-    if (before.branch !== me.branch) throw new Error("Out of your branch");
-    if (before.createdByRole === "admin") throw new Error("Cannot delete users created by Admin");
+    throw new Error("Supervisors must request removal from the admin");
   }
   dsSetAgents(list.filter((a) => a !== before));
   setUsers(getUsers().filter((u) => u.id !== before.userId));

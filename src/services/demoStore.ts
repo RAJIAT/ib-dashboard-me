@@ -352,6 +352,33 @@ export function subscribeSettings(cb: () => void) {
   return () => window.removeEventListener("aib:settings-changed", fn);
 }
 
+// ---------- Notifications ----------
+
+export function getNotifications(): DemoNotification[] {
+  ensureSeeded();
+  return read(KEY.notifications, [] as DemoNotification[]);
+}
+export function setNotifications(list: DemoNotification[]) {
+  write(KEY.notifications, list); notify("notifications");
+}
+export function subscribeNotifications(cb: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const fn = () => cb();
+  window.addEventListener("aib:notifications-changed", fn);
+  return () => window.removeEventListener("aib:notifications-changed", fn);
+}
+export function pushNotifications(items: Omit<DemoNotification, "id" | "read" | "createdAt">[]) {
+  if (items.length === 0) return;
+  const now = new Date().toISOString();
+  const next: DemoNotification[] = items.map((n) => ({
+    ...n,
+    id: crypto.randomUUID(),
+    read: false,
+    createdAt: now,
+  }));
+  setNotifications([...next, ...getNotifications()].slice(0, 200));
+}
+
 export function newRequestId(): string { return `REQ-${nextSeq()}`; }
 
 // ---------- File → data URL ----------

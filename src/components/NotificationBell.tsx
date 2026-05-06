@@ -85,7 +85,7 @@ export function NotificationBell() {
                 </div>
               );
               return n.link ? (
-                <Link key={n.id} to={n.link} onClick={() => onItem(n)}>{body}</Link>
+                <Link key={n.id} to={n.link as string} onClick={() => onItem(n)}>{body}</Link>
               ) : (
                 <button key={n.id} onClick={() => onItem(n)} className="block w-full text-start">{body}</button>
               );

@@ -285,9 +285,15 @@ function AdminAgents() {
                         <Trash2 className="h-4 w-4" />
                       </IconBtn>
                     ) : isAdminCreated(a) ? (
-                      <IconBtn danger disabledLook label={t.agents.noDeleteAdminCreated} onClick={() => toast.error(t.agents.noDeleteAdminCreated)}>
-                        <Trash2 className="h-4 w-4" />
-                      </IconBtn>
+                      a.removalRequest ? (
+                        <IconBtn danger disabledLook label={t.agents.removalAlreadyRequested} onClick={() => toast.message(t.agents.removalAlreadyRequested)}>
+                          <Send className="h-4 w-4" />
+                        </IconBtn>
+                      ) : (
+                        <IconBtn danger label={t.agents.requestRemoval} onClick={() => setRemovalTarget(a)}>
+                          <Send className="h-4 w-4" />
+                        </IconBtn>
+                      )
                     ) : canDelete || (isSupervisor && a.createdByUserId === user?.id) ? (
                       <IconBtn danger label={t.agents.delete} onClick={() => onDelete(a)}>
                         <Trash2 className="h-4 w-4" />

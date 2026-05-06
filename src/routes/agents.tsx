@@ -35,6 +35,8 @@ function AdminAgents() {
     open: false, mode: "create",
   });
   const [confirmTarget, setConfirmTarget] = useState<Agent | null>(null);
+  const [removalTarget, setRemovalTarget] = useState<Agent | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const Back = dir === "rtl" ? ArrowRight : ArrowLeft;
 
   const isSupervisor = user?.role === "supervisor";

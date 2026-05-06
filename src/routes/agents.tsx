@@ -179,13 +179,24 @@ function AdminAgents() {
           </Link>
           <p className="hidden text-sm text-muted-foreground sm:block">{t.agents.subtitle}</p>
         </div>
-        <button
-          onClick={() => setDialog({ open: true, mode: "create" })}
-          className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95"
-        >
-          <Plus className="h-4 w-4" />
-          {cur.addLabel}
-        </button>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              onClick={() => setImportOpen(true)}
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-foreground hover:bg-muted"
+            >
+              <Upload className="h-4 w-4" />
+              {t.agents.importExcel}
+            </button>
+          )}
+          <button
+            onClick={() => setDialog({ open: true, mode: "create" })}
+            className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-soft transition active:scale-95"
+          >
+            <Plus className="h-4 w-4" />
+            {cur.addLabel}
+          </button>
+        </div>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">

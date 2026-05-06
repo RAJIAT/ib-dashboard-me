@@ -165,6 +165,42 @@ function AdminDashboard() {
         </div>
       )}
 
+      {!isSupervisor && pendingRemovals.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-warning/40 bg-warning/5 p-4 shadow-card">
+          <div className="mb-3">
+            <div className="text-sm font-semibold text-foreground">{t.agents.pendingRemovalsTitle}</div>
+            <div className="text-xs text-muted-foreground">{t.agents.pendingRemovalsHint}</div>
+          </div>
+          <div className="space-y-2">
+            {pendingRemovals.map((a) => (
+              <div key={a.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border bg-card p-3">
+                <div className="min-w-0 text-sm">
+                  <div className="font-bold text-foreground">{a.name} <span className="text-xs font-normal text-muted-foreground">· {a.branch}</span></div>
+                  <div className="text-xs text-muted-foreground">
+                    {t.agents.requestedBy}: {a.removalRequest?.requestedByName} · {a.removalRequest && new Date(a.removalRequest.requestedAt).toLocaleString()}
+                  </div>
+                  <div className="mt-1 text-xs text-foreground"><b>{t.agents.reason}:</b> {a.removalRequest?.reason}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => { try { await dismissAgentRemoval(a.id); toast.success(t.agents.removalDismissed); } catch (e: any) { toast.error(e?.message); } }}
+                    className="h-9 rounded-lg border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:bg-muted"
+                  >
+                    {t.agents.removalDismiss}
+                  </button>
+                  <button
+                    onClick={async () => { try { await approveAgentRemoval(a.id); toast.success(t.agents.removalApproved); } catch (e: any) { toast.error(e?.message); } }}
+                    className="h-9 rounded-lg bg-destructive px-3 text-xs font-semibold text-destructive-foreground"
+                  >
+                    {t.agents.removalApprove}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="mt-6 rounded-2xl border border-border bg-card p-4 shadow-card">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

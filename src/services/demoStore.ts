@@ -81,6 +81,9 @@ export type DemoRequest = {
   uuid: string;
   agentId: string;
   agentName: string;
+  /** The original agent (sales) who first received the request — used to return after underwriter review. */
+  originAgentId?: string;
+  originAgentName?: string;
   branch: string;
   status: DemoStatus;
   createdAt: string;

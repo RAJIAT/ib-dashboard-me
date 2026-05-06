@@ -649,6 +649,7 @@ export async function reassignRequest(requestId: string, newAgentId: string): Pr
     link: `/requests/${req.id}`,
   })));
 
+  return next[idx];
 }
 
 // ---------------------------------------------------------------------------

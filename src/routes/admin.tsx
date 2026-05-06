@@ -7,11 +7,13 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useLang } from "@/i18n/LanguageProvider";
 import { useRequestsLive } from "@/hooks/useRequestsLive";
 import {
+  approveAgentRemoval, dismissAgentRemoval,
   getCurrentUser, refreshCurrentUser, listAgents, getAgents, listBranches,
   subscribeAgents, getApprovalRequired, setApprovalRequired, subscribeSettings,
   type Agent, type AuthUser, type RequestStatus,
 } from "@/services/api";
 import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin")({
   component: AdminDashboard,

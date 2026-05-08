@@ -1032,7 +1032,7 @@ function ReassignCard({
       </h3>
       <p className="mb-3 text-xs text-muted-foreground">
         {showSendToUW
-          ? (lang === "ar" ? "اختر الأندررايتر الذي تريد إرسال الطلب له" : "Pick the underwriter to send this request to")
+          ? (lang === "ar" ? "اختر الأندررايتر ليجهّز عرض السعر — وسيرجع الطلب لك تلقائياً بعد رفع العرض." : "Pick an underwriter to prepare the quote — the request will return to you automatically once the quote is uploaded.")
           : showReturnToSales
             ? (lang === "ar" ? "اختر السيلز الذي تريد إرجاع الطلب له" : "Pick the sales agent to return this request to")
             : (lang === "ar" ? "اختر موظفاً لتحويل الطلب له" : "Pick an agent to transfer this request to")}

@@ -201,7 +201,10 @@ export async function listRequests(opts?: { agentId?: string; branch?: string })
   // (so a sales agent keeps seeing the request after it's reassigned to an underwriter).
   if (opts?.agentId) list = list.filter((r) => r.agentId === opts.agentId || r.originAgentId === opts.agentId);
   if (opts?.branch) list = list.filter((r) => r.branch === opts.branch);
-  return [...list].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  // Newest first — use the most recent of createdAt / assignedAt so a freshly
+  // reassigned request bubbles to the top of the new owner's list.
+  const ts = (r: InsuranceRequest) => (r.assignedAt && r.assignedAt > r.createdAt ? r.assignedAt : r.createdAt);
+  return [...list].sort((a, b) => (ts(a) < ts(b) ? 1 : -1));
 }
 
 export async function getRequest(id: string): Promise<InsuranceRequest | null> {
@@ -622,8 +625,21 @@ export async function reassignRequest(requestId: string, newAgentId: string): Pr
   if (target.id === req.agentId) return req; // no-op
 
   const previousOwner = agents.find((a) => a.id === req.agentId);
+  // Preserve the original sales agent so the request can auto-return after
+  // the underwriter uploads the quote. If origin isn't set yet (older data)
+  // and the previous owner is a sales agent, capture them as origin.
+  const shouldCaptureOrigin =
+    !req.originAgentId && previousOwner?.staffType === "sales" && target.staffType === "underwriter";
   const next = [...list];
-  next[idx] = { ...req, agentId: target.id, agentName: target.name };
+  next[idx] = {
+    ...req,
+    agentId: target.id,
+    agentName: target.name,
+    assignedAt: new Date().toISOString(),
+    ...(shouldCaptureOrigin
+      ? { originAgentId: previousOwner!.id, originAgentName: previousOwner!.name }
+      : {}),
+  };
   setRequests(next);
 
   logEvent({
@@ -701,7 +717,7 @@ export async function addQuotesToRequest(requestId: string, files: File[]): Prom
     ...req,
     quotes: [...(req.quotes ?? []), ...newQuotes],
     ...(shouldReturnToSales
-      ? { agentId: originSales!.id, agentName: originSales!.name }
+      ? { agentId: originSales!.id, agentName: originSales!.name, assignedAt: new Date().toISOString() }
       : {}),
   };
   const next = [...list];

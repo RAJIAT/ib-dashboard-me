@@ -99,6 +99,11 @@ function RequestDetails() {
   // Read role once on mount; avoids re-running auth checks every render.
   const [user] = useState<AuthUser | null>(() => getCurrentUser());
   const role = user?.role ?? "agent";
+  const myStaffType = useMemo(() => {
+    if (!user?.agentId) return undefined;
+    return listAgents().find((a) => a.id === user.agentId)?.staffType;
+  }, [user?.agentId]);
+  const isUnderwriter = myStaffType === "underwriter";
 
   useEffect(() => {
     if (!user) { navigate({ to: "/login" }); return; }

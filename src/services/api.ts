@@ -201,7 +201,10 @@ export async function listRequests(opts?: { agentId?: string; branch?: string })
   // (so a sales agent keeps seeing the request after it's reassigned to an underwriter).
   if (opts?.agentId) list = list.filter((r) => r.agentId === opts.agentId || r.originAgentId === opts.agentId);
   if (opts?.branch) list = list.filter((r) => r.branch === opts.branch);
-  return [...list].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  // Newest first — use the most recent of createdAt / assignedAt so a freshly
+  // reassigned request bubbles to the top of the new owner's list.
+  const ts = (r: InsuranceRequest) => (r.assignedAt && r.assignedAt > r.createdAt ? r.assignedAt : r.createdAt);
+  return [...list].sort((a, b) => (ts(a) < ts(b) ? 1 : -1));
 }
 
 export async function getRequest(id: string): Promise<InsuranceRequest | null> {

@@ -683,28 +683,46 @@ export async function addQuotesToRequest(requestId: string, files: File[]): Prom
     })),
   );
 
+  // If an underwriter is the current owner and there's an original sales agent,
+  // automatically return the request back to the sales agent so they can share
+  // the quote link with the customer. This makes the workflow explicit:
+  //   sales → (request quote) → underwriter → (upload quote) → sales → customer
+  const agents = dsGetAgents();
+  const currentOwner = agents.find((a) => a.id === req.agentId);
+  const originSales = req.originAgentId && req.originAgentId !== req.agentId
+    ? agents.find((a) => a.id === req.originAgentId)
+    : undefined;
+  const shouldReturnToSales =
+    currentOwner?.staffType === "underwriter" && originSales && originSales.active;
+
+  const updated: DemoRequest = {
+    ...req,
+    quotes: [...(req.quotes ?? []), ...newQuotes],
+    ...(shouldReturnToSales
+      ? { agentId: originSales!.id, agentName: originSales!.name }
+      : {}),
+  };
   const next = [...list];
-  next[idx] = { ...req, quotes: [...(req.quotes ?? []), ...newQuotes] };
+  next[idx] = updated;
   setRequests(next);
 
   logEvent({
     action: "request.quote_uploaded",
     entityType: "request", entityId: req.id, entityLabel: req.id, branch: req.branch,
-    meta: { count: newQuotes.length },
+    meta: { count: newQuotes.length, returnedToSales: !!shouldReturnToSales },
   });
 
-  // Notify the original sales agent
-  const agents = dsGetAgents();
+  // Notify the original sales agent + branch supervisor
   const recipients = new Set<string>();
-  if (req.originAgentId) {
-    const origin = agents.find((a) => a.id === req.originAgentId);
-    if (origin?.userId && origin.userId !== me.id) recipients.add(origin.userId);
-  }
-  const owner = agents.find((a) => a.id === req.agentId);
-  if (owner?.userId && owner.userId !== me.id) recipients.add(owner.userId);
+  if (originSales?.userId && originSales.userId !== me.id) recipients.add(originSales.userId);
+  if (currentOwner?.userId && currentOwner.userId !== me.id) recipients.add(currentOwner.userId);
+  const branchSup = agents.find((a) => a.role === "supervisor" && a.branch === req.branch);
+  if (branchSup?.userId && branchSup.userId !== me.id) recipients.add(branchSup.userId);
   pushNotifications([...recipients].map((uid) => ({
     recipientUserId: uid,
-    title: `Quote uploaded for ${req.id}`,
+    title: shouldReturnToSales && uid === originSales?.userId
+      ? `Quote ready for ${req.id} — share with customer`
+      : `Quote uploaded for ${req.id}`,
     body: `${me.name} · ${newQuotes.length} file${newQuotes.length === 1 ? "" : "s"}`,
     kind: "request_status" as const,
     link: `/requests/${req.id}`,

@@ -1001,12 +1001,12 @@ function ReassignCard({
   const effectiveTarget = target || defaultTarget;
 
   const primaryLabel = showSendToUW
-    ? (lang === "ar" ? "إرسال للأندررايتر" : "Send to underwriter")
+    ? (lang === "ar" ? "اطلب عرض السعر من الأندررايتر" : "Request quote from underwriter")
     : showReturnToSales
       ? (lang === "ar" ? "إرجاع للسيلز" : "Return to sales")
       : (lang === "ar" ? "نقل" : "Transfer");
   const successLabel = showSendToUW
-    ? (lang === "ar" ? "تم الإرسال للأندررايتر" : "Sent to underwriter")
+    ? (lang === "ar" ? "تم إرسال الطلب للأندررايتر" : "Request sent to underwriter")
     : showReturnToSales
       ? (lang === "ar" ? "تم إرجاع الطلب للسيلز" : "Returned to sales")
       : (lang === "ar" ? "تم نقل الطلب" : "Request reassigned");
@@ -1032,7 +1032,7 @@ function ReassignCard({
       </h3>
       <p className="mb-3 text-xs text-muted-foreground">
         {showSendToUW
-          ? (lang === "ar" ? "اختر الأندررايتر الذي تريد إرسال الطلب له" : "Pick the underwriter to send this request to")
+          ? (lang === "ar" ? "اختر الأندررايتر ليجهّز عرض السعر — وسيرجع الطلب لك تلقائياً بعد رفع العرض." : "Pick an underwriter to prepare the quote — the request will return to you automatically once the quote is uploaded.")
           : showReturnToSales
             ? (lang === "ar" ? "اختر السيلز الذي تريد إرجاع الطلب له" : "Pick the sales agent to return this request to")
             : (lang === "ar" ? "اختر موظفاً لتحويل الطلب له" : "Pick an agent to transfer this request to")}
@@ -1157,7 +1157,11 @@ function QuotesCard({
 
       {quotes.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {ar ? "لم يتم رفع أي عرض سعر بعد." : "No quotes uploaded yet."}
+          {isUW
+            ? (ar ? "ارفع عرض السعر هنا — سيرجع الطلب تلقائياً للسيلز ليرسله للعميل." : "Upload the quote here — the request returns to sales automatically so they can share it with the customer.")
+            : isSales
+              ? (ar ? "بانتظار رفع عرض السعر من الأندررايتر." : "Waiting for the underwriter to upload the quote.")
+              : (ar ? "لم يتم رفع أي عرض سعر بعد." : "No quotes uploaded yet.")}
         </p>
       ) : (
         <ul className="space-y-2">

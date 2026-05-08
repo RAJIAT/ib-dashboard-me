@@ -494,47 +494,51 @@ function RequestDetails() {
             onUpdated={(r) => setReq(r)}
           />
 
-          {/* Reassign */}
-          <ReassignCard req={req} user={user} onReassigned={(r) => setReq(r)} />
+          {/* Reassign — hidden for underwriter (their job is just to upload the quote) */}
+          {!isUnderwriter && (
+            <ReassignCard req={req} user={user} onReassigned={(r) => setReq(r)} />
+          )}
 
           {/* Quotes (underwriter uploads, sales shares with customer) */}
           <QuotesCard req={req} user={user} onUpdated={(r: InsuranceRequest) => setReq(r)} />
 
-          {/* Actions */}
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <button
-              onClick={() => setStatus("linkSent", "linkSent")}
-              disabled={saving}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface text-sm font-semibold text-foreground shadow-soft transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingAction === "linkSent" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {t.details.markLinkSent}
-            </button>
-            <button
-              onClick={() => setStatus("processing", "quote")}
-              disabled={saving}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-soft transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingAction === "quote" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-              {t.details.createQuote}
-            </button>
-            <button
-              onClick={() => setStatus("sold", "sold")}
-              disabled={saving}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-success text-sm font-semibold text-success-foreground shadow-soft transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingAction === "sold" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              {t.details.markSold}
-            </button>
-            <button
-              onClick={() => setStatus("reupload", "reupload")}
-              disabled={saving}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-purple text-sm font-semibold text-purple-foreground shadow-soft transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {savingAction === "reupload" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-              {t.details.reupload}
-            </button>
-          </div>
+          {/* Actions — sales/admin/supervisor only. Underwriters only view info + add notes. */}
+          {!isUnderwriter && (
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <button
+                onClick={() => setStatus("linkSent", "linkSent")}
+                disabled={saving}
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface text-sm font-semibold text-foreground shadow-soft transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingAction === "linkSent" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {t.details.markLinkSent}
+              </button>
+              <button
+                onClick={() => setStatus("processing", "quote")}
+                disabled={saving}
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-sm font-semibold text-primary-foreground shadow-soft transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingAction === "quote" ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                {t.details.createQuote}
+              </button>
+              <button
+                onClick={() => setStatus("sold", "sold")}
+                disabled={saving}
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-success text-sm font-semibold text-success-foreground shadow-soft transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingAction === "sold" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                {t.details.markSold}
+              </button>
+              <button
+                onClick={() => setStatus("reupload", "reupload")}
+                disabled={saving}
+                className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-purple text-sm font-semibold text-purple-foreground shadow-soft transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingAction === "reupload" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                {t.details.reupload}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

@@ -131,10 +131,12 @@ export function DashboardShell({
 function SidebarInner({
   items,
   user,
+  roleLabel,
   onLogout,
 }: {
   items: NavItem[];
   user: { name: string; email: string; role: Role };
+  roleLabel: string;
   onLogout: () => void;
 }) {
   const { t } = useLang();
@@ -147,7 +149,7 @@ function SidebarInner({
           <Logo size={40} />
           <div>
             <div className="text-sm font-bold text-sidebar-foreground">Middle East Insurance</div>
-            <div className="text-xs text-muted-foreground capitalize">{user.role}</div>
+            <div className="text-xs text-muted-foreground capitalize">{roleLabel}</div>
           </div>
         </div>
         <button

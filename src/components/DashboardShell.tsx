@@ -6,7 +6,7 @@ import { Logo } from "@/components/Logo";
 import { NotificationBell } from "@/components/NotificationBell";
 
 import { useLang } from "@/i18n/LanguageProvider";
-import { canManageAgents, getCurrentUser, logout, refreshCurrentUser, type Role } from "@/services/api";
+import { canManageAgents, getCurrentUser, listAgents, logout, refreshCurrentUser, type Role } from "@/services/api";
 
 type NavItem = { to: string; label: string; icon: ReactNode };
 

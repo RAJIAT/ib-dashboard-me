@@ -93,9 +93,8 @@ function AgentDashboard() {
         </div>
       </div>
 
-      {/* Personal client link */}
-      <ShareLinkCard agentId={user.agentId ?? ""} agentName={user.name} />
-
+      {/* Personal client link — sales only. Underwriters don't share links with customers. */}
+      {!isUnderwriter && <ShareLinkCard agentId={user.agentId ?? ""} agentName={user.name} />}
       {/* Status filter tabs */}
       <div className="mb-4 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <div className="flex w-max gap-2 sm:w-auto sm:flex-wrap">

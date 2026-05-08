@@ -695,7 +695,7 @@ export async function addQuotesToRequest(requestId: string, files: File[]): Prom
     ? agents.find((a) => a.id === req.originAgentId)
     : undefined;
   const shouldReturnToSales =
-    currentOwner?.staffType === "underwriter" && originSales && originSales.active;
+    currentOwner?.staffType === "underwriter" && !!originSales;
 
   const updated: DemoRequest = {
     ...req,

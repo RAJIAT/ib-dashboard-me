@@ -635,6 +635,7 @@ export async function reassignRequest(requestId: string, newAgentId: string): Pr
     ...req,
     agentId: target.id,
     agentName: target.name,
+    assignedAt: new Date().toISOString(),
     ...(shouldCaptureOrigin
       ? { originAgentId: previousOwner!.id, originAgentName: previousOwner!.name }
       : {}),

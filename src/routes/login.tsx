@@ -130,6 +130,22 @@ function LoginPage() {
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              resetDemo();
+              setError("");
+              setEmail("");
+              setPassword("");
+              if (typeof window !== "undefined") {
+                localStorage.removeItem("aib_auth_user");
+                window.location.reload();
+              }
+            }}
+            className="mt-3 w-full text-center text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            إعادة تعيين بيانات الديمو
+          </button>
         </div>
       </main>
     </div>

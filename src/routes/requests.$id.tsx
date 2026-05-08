@@ -1001,12 +1001,12 @@ function ReassignCard({
   const effectiveTarget = target || defaultTarget;
 
   const primaryLabel = showSendToUW
-    ? (lang === "ar" ? "إرسال للأندررايتر" : "Send to underwriter")
+    ? (lang === "ar" ? "اطلب عرض السعر من الأندررايتر" : "Request quote from underwriter")
     : showReturnToSales
       ? (lang === "ar" ? "إرجاع للسيلز" : "Return to sales")
       : (lang === "ar" ? "نقل" : "Transfer");
   const successLabel = showSendToUW
-    ? (lang === "ar" ? "تم الإرسال للأندررايتر" : "Sent to underwriter")
+    ? (lang === "ar" ? "تم إرسال الطلب للأندررايتر" : "Request sent to underwriter")
     : showReturnToSales
       ? (lang === "ar" ? "تم إرجاع الطلب للسيلز" : "Returned to sales")
       : (lang === "ar" ? "تم نقل الطلب" : "Request reassigned");

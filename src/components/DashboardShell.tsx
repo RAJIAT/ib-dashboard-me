@@ -80,6 +80,12 @@ export function DashboardShell({
   // Suppress unused warning — kept for potential per-shell admin gating
   void canManageAgents;
 
+  // Show staff type (Underwriter / Sales) for agents instead of generic "agent".
+  const staffType = user.agentId
+    ? listAgents().find((a) => a.id === user.agentId)?.staffType
+    : undefined;
+  const roleLabel = staffType ?? user.role;
+
   return (
     <div className="min-h-screen bg-background">
       <div className="flex min-h-screen">

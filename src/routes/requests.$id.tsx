@@ -1042,8 +1042,14 @@ function ReassignCard({
         ? (lang === "ar" ? "تم إرجاع الطلب للسيلز" : "Returned to sales")
         : (lang === "ar" ? "تم نقل الطلب" : "Request reassigned");
 
+  // Build the option list. For an underwriter owner, inject originSales so
+  // "return to sales" is selectable even though sales agents are filtered out.
+  const optionPool = canReturnToSales && originSales && !candidates.some((a) => a.id === originSales.id)
+    ? [...candidates, originSales]
+    : candidates;
+
   // Re-order options so the most likely target appears first.
-  const ordered = [...candidates].sort((a, b) => {
+  const ordered = [...optionPool].sort((a, b) => {
     if (showSendToUW) {
       const ua = a.staffType === "underwriter" ? 0 : 1;
       const ub = b.staffType === "underwriter" ? 0 : 1;

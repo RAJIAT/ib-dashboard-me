@@ -360,12 +360,17 @@ export async function appendAttachmentsToRequest(
     },
   };
   setRequests(next);
+  logEvent({
+    action: "request.document_uploaded",
+    entityType: "request", entityId: req.id, entityLabel: req.id, branch: req.branch,
+    meta: {
+      docKey: "missingAttachments",
+      count: newAttachments.length,
+      files: newAttachments.map((a) => ({ name: a.name, size: a.size, type: a.type })),
+    },
+  });
   return next[idx];
 }
-
-// ---------------------------------------------------------------------------
-// Agents
-// ---------------------------------------------------------------------------
 
 function dsToAgent(a: DemoAgent): Agent { return { ...a }; }
 

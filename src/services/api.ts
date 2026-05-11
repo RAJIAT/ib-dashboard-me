@@ -554,7 +554,7 @@ function logEvent(input: {
     after: input.after ?? null,
     meta: input.meta ?? undefined,
   };
-  setAudit([entry, ...getAudit()].slice(0, 500));
+  setAudit([entry, ...getAudit()].slice(0, 5000));
 }
 
 // ---------------------------------------------------------------------------

@@ -656,11 +656,19 @@ export async function reassignRequest(requestId: string, newAgentId: string): Pr
   };
   setRequests(next);
 
+  const fromType = previousOwner?.staffType;
+  const toType = target.staffType;
+  let action = "request.reassigned";
+  if (fromType === "sales" && toType === "underwriter") action = "request.assigned_to_underwriter";
+  else if (fromType === "underwriter" && toType === "sales") action = "request.returned_to_sales";
+  else if (fromType === "underwriter" && toType === "underwriter") action = "request.underwriter_changed";
+  else if (fromType === "sales" && toType === "sales") action = "request.sales_changed";
+
   logEvent({
-    action: "request.reassigned",
+    action,
     entityType: "request", entityId: req.id, entityLabel: req.id, branch: req.branch,
-    before: { agentId: req.agentId, agentName: req.agentName },
-    after: { agentId: target.id, agentName: target.name },
+    before: { agentId: req.agentId, agentName: req.agentName, staffType: fromType },
+    after: { agentId: target.id, agentName: target.name, staffType: toType },
   });
 
   // Notify previous owner, new owner, and branch supervisor

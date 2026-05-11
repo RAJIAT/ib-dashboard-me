@@ -315,6 +315,11 @@ export async function addRequestNote(
   if (input.kind === "missing" && req.status !== "reupload") req.status = "reupload";
   next[idx] = req;
   setRequests(next);
+  logEvent({
+    action: input.kind === "missing" ? "request.reupload_requested" : "request.note_added",
+    entityType: "request", entityId: req.id, entityLabel: req.id, branch: req.branch,
+    meta: { noteId: note.id, snippet: note.text.slice(0, 140), authorRole: me.role },
+  });
   return req;
 }
 
@@ -355,6 +360,15 @@ export async function appendAttachmentsToRequest(
     },
   };
   setRequests(next);
+  logEvent({
+    action: "request.document_uploaded",
+    entityType: "request", entityId: req.id, entityLabel: req.id, branch: req.branch,
+    meta: {
+      docKey: "missingAttachments",
+      count: newAttachments.length,
+      files: newAttachments.map((a) => ({ name: a.name, size: a.size, type: a.type })),
+    },
+  });
   return next[idx];
 }
 
@@ -554,7 +568,7 @@ function logEvent(input: {
     after: input.after ?? null,
     meta: input.meta ?? undefined,
   };
-  setAudit([entry, ...getAudit()].slice(0, 500));
+  setAudit([entry, ...getAudit()].slice(0, 5000));
 }
 
 // ---------------------------------------------------------------------------
@@ -642,11 +656,19 @@ export async function reassignRequest(requestId: string, newAgentId: string): Pr
   };
   setRequests(next);
 
+  const fromType = previousOwner?.staffType;
+  const toType = target.staffType;
+  let action = "request.reassigned";
+  if (fromType === "sales" && toType === "underwriter") action = "request.assigned_to_underwriter";
+  else if (fromType === "underwriter" && toType === "sales") action = "request.returned_to_sales";
+  else if (fromType === "underwriter" && toType === "underwriter") action = "request.underwriter_changed";
+  else if (fromType === "sales" && toType === "sales") action = "request.sales_changed";
+
   logEvent({
-    action: "request.reassigned",
+    action,
     entityType: "request", entityId: req.id, entityLabel: req.id, branch: req.branch,
-    before: { agentId: req.agentId, agentName: req.agentName },
-    after: { agentId: target.id, agentName: target.name },
+    before: { agentId: req.agentId, agentName: req.agentName, staffType: fromType },
+    after: { agentId: target.id, agentName: target.name, staffType: toType },
   });
 
   // Notify previous owner, new owner, and branch supervisor
@@ -727,8 +749,21 @@ export async function addQuotesToRequest(requestId: string, files: File[]): Prom
   logEvent({
     action: "request.quote_uploaded",
     entityType: "request", entityId: req.id, entityLabel: req.id, branch: req.branch,
-    meta: { count: newQuotes.length, returnedToSales: !!shouldReturnToSales },
+    meta: {
+      count: newQuotes.length,
+      returnedToSales: !!shouldReturnToSales,
+      files: newQuotes.map((q) => ({ name: q.name, size: q.size, type: q.type })),
+    },
   });
+  if (shouldReturnToSales && originSales) {
+    logEvent({
+      action: "request.returned_to_sales",
+      entityType: "request", entityId: req.id, entityLabel: req.id, branch: req.branch,
+      before: { agentId: currentOwner?.id, agentName: currentOwner?.name, staffType: "underwriter" },
+      after: { agentId: originSales.id, agentName: originSales.name, staffType: "sales" },
+      meta: { auto: true, reason: "quote_uploaded" },
+    });
+  }
 
   // Notify the original sales agent + branch supervisor
   const recipients = new Set<string>();
@@ -762,6 +797,11 @@ export async function removeQuoteFromRequest(requestId: string, quoteId: string)
   const next = [...list];
   next[idx] = { ...req, quotes: (req.quotes ?? []).filter((x) => x.id !== quoteId) };
   setRequests(next);
+  logEvent({
+    action: "request.quote_removed",
+    entityType: "request", entityId: req.id, entityLabel: req.id, branch: req.branch,
+    meta: { quoteId, name: q.name },
+  });
   return next[idx];
 }
 

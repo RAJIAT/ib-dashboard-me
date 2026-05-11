@@ -7,6 +7,18 @@ export type AuditEntry = DemoAuditEntry;
 export type AuditAction =
   | "request.status_changed"
   | "request.created"
+  | "request.reassigned"
+  | "request.assigned_to_underwriter"
+  | "request.returned_to_sales"
+  | "request.underwriter_changed"
+  | "request.sales_changed"
+  | "request.document_uploaded"
+  | "request.document_removed"
+  | "request.reupload_requested"
+  | "request.note_added"
+  | "request.quote_uploaded"
+  | "request.quote_removed"
+  | "request.shared_with_customer"
   | "agent.created"
   | "agent.pending_created"
   | "agent.approved"
@@ -31,6 +43,15 @@ export async function fetchAudit(opts?: {
   if (opts?.entityType) rows = rows.filter((r) => r.entityType === opts.entityType);
   if (opts?.limit) rows = rows.slice(0, opts.limit);
   return rows;
+}
+
+/** Returns history for one request, oldest first. */
+export async function fetchRequestHistory(requestId: string): Promise<AuditEntry[]> {
+  const rows = getAudit().filter(
+    (r) => r.entityType === "request" && r.entityId === requestId,
+  );
+  // store is newest-first; reverse for chronological timeline
+  return rows.slice().reverse();
 }
 
 export async function clearAudit() {

@@ -494,10 +494,8 @@ function RequestDetails() {
             onUpdated={(r) => setReq(r)}
           />
 
-          {/* Reassign — hidden for underwriter (their job is just to upload the quote) */}
-          {!isUnderwriter && (
-            <ReassignCard req={req} user={user} onReassigned={(r) => setReq(r)} />
-          )}
+          {/* Reassign — sales transfers to underwriters; underwriters can hand off to another underwriter or return to sales. */}
+          <ReassignCard req={req} user={user} onReassigned={(r) => setReq(r)} />
 
           {/* Quotes (underwriter uploads, sales shares with customer) */}
           <QuotesCard req={req} user={user} onUpdated={(r: InsuranceRequest) => setReq(r)} />

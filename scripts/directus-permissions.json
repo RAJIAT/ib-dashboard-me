@@ -1,0 +1,212 @@
+{
+  "_comment": "Permission filters لكل role. يستخدمها directus-bootstrap.ts. كل entry = صف بـ directus_permissions. $CURRENT_USER يتحوّل بـ Directus لـ id المستخدم الحالي تلقائياً.",
+  "supervisor": [
+    {
+      "collection": "branches",
+      "action": "read",
+      "fields": ["*"],
+      "permissions": {}
+    },
+    {
+      "collection": "directus_users",
+      "action": "read",
+      "fields": ["id", "first_name", "last_name", "email", "app_role", "staff_type", "branch", "agent_code", "supervisor", "assigned_underwriter", "pending_approval", "app_active"],
+      "permissions": { "branch": { "_eq": "$CURRENT_USER.branch" } }
+    },
+    {
+      "collection": "directus_users",
+      "action": "create",
+      "fields": ["first_name", "last_name", "email", "password", "app_role", "staff_type", "branch", "agent_code", "supervisor", "assigned_underwriter", "app_active"],
+      "validation": {
+        "_and": [
+          { "branch": { "_eq": "$CURRENT_USER.branch" } },
+          { "app_role": { "_in": ["agent"] } }
+        ]
+      }
+    },
+    {
+      "collection": "directus_users",
+      "action": "update",
+      "fields": ["first_name", "last_name", "staff_type", "supervisor", "assigned_underwriter", "pending_approval", "app_active", "agent_code"],
+      "permissions": {
+        "_and": [
+          { "branch": { "_eq": "$CURRENT_USER.branch" } },
+          { "app_role": { "_in": ["agent"] } }
+        ]
+      }
+    },
+    {
+      "collection": "requests",
+      "action": "read",
+      "fields": ["*"],
+      "permissions": { "branch": { "_eq": "$CURRENT_USER.branch" } }
+    },
+    {
+      "collection": "requests",
+      "action": "create",
+      "fields": ["*"],
+      "validation": { "branch": { "_eq": "$CURRENT_USER.branch" } }
+    },
+    {
+      "collection": "requests",
+      "action": "update",
+      "fields": ["agent", "status", "customer_name", "customer_email", "customer_phone", "assigned_at"],
+      "permissions": { "branch": { "_eq": "$CURRENT_USER.branch" } }
+    },
+    {
+      "collection": "request_notes",
+      "action": "read",
+      "fields": ["*"],
+      "permissions": { "request": { "branch": { "_eq": "$CURRENT_USER.branch" } } }
+    },
+    {
+      "collection": "request_notes",
+      "action": "create",
+      "fields": ["*"]
+    },
+    {
+      "collection": "request_files",
+      "action": "read",
+      "fields": ["*"],
+      "permissions": { "request": { "branch": { "_eq": "$CURRENT_USER.branch" } } }
+    },
+    {
+      "collection": "request_files",
+      "action": "create",
+      "fields": ["*"]
+    },
+    {
+      "collection": "audit_log",
+      "action": "read",
+      "fields": ["*"],
+      "permissions": { "actor_branch": { "_eq": "$CURRENT_USER.branch.code" } }
+    },
+    {
+      "collection": "notifications",
+      "action": "read",
+      "fields": ["*"],
+      "permissions": { "recipient": { "_eq": "$CURRENT_USER" } }
+    },
+    {
+      "collection": "notifications",
+      "action": "update",
+      "fields": ["read"],
+      "permissions": { "recipient": { "_eq": "$CURRENT_USER" } }
+    },
+    {
+      "collection": "app_settings",
+      "action": "read",
+      "fields": ["*"]
+    }
+  ],
+  "agent": [
+    {
+      "collection": "branches",
+      "action": "read",
+      "fields": ["id", "name", "code", "is_active"]
+    },
+    {
+      "collection": "directus_users",
+      "action": "read",
+      "fields": ["id", "first_name", "last_name", "agent_code", "app_role", "staff_type", "branch", "app_active"],
+      "permissions": { "branch": { "_eq": "$CURRENT_USER.branch" } }
+    },
+    {
+      "collection": "directus_users",
+      "action": "update",
+      "fields": ["first_name", "last_name"],
+      "permissions": { "id": { "_eq": "$CURRENT_USER" } }
+    },
+    {
+      "collection": "requests",
+      "action": "read",
+      "fields": ["*"],
+      "permissions": {
+        "_or": [
+          { "agent": { "_eq": "$CURRENT_USER" } },
+          { "origin_agent": { "_eq": "$CURRENT_USER" } }
+        ]
+      }
+    },
+    {
+      "collection": "requests",
+      "action": "create",
+      "fields": ["id", "uuid", "agent", "origin_agent", "branch", "status", "customer_name", "customer_email", "customer_phone"],
+      "validation": {
+        "_and": [
+          { "agent": { "_eq": "$CURRENT_USER" } },
+          { "origin_agent": { "_eq": "$CURRENT_USER" } },
+          { "branch": { "_eq": "$CURRENT_USER.branch" } }
+        ]
+      }
+    },
+    {
+      "collection": "requests",
+      "action": "update",
+      "fields": ["agent", "status", "customer_name", "customer_email", "customer_phone", "assigned_at"],
+      "permissions": {
+        "_or": [
+          { "agent": { "_eq": "$CURRENT_USER" } },
+          { "origin_agent": { "_eq": "$CURRENT_USER" } }
+        ]
+      },
+      "_comment": "تغيير agent يخضع لـ enforce_sales_routing / enforce_underwriter_target flows"
+    },
+    {
+      "collection": "request_notes",
+      "action": "read",
+      "fields": ["*"],
+      "permissions": {
+        "request": {
+          "_or": [
+            { "agent": { "_eq": "$CURRENT_USER" } },
+            { "origin_agent": { "_eq": "$CURRENT_USER" } }
+          ]
+        }
+      }
+    },
+    {
+      "collection": "request_notes",
+      "action": "create",
+      "fields": ["request", "text", "kind", "author", "author_role"],
+      "validation": { "author": { "_eq": "$CURRENT_USER" } }
+    },
+    {
+      "collection": "request_files",
+      "action": "read",
+      "fields": ["*"],
+      "permissions": {
+        "request": {
+          "_or": [
+            { "agent": { "_eq": "$CURRENT_USER" } },
+            { "origin_agent": { "_eq": "$CURRENT_USER" } }
+          ]
+        }
+      }
+    },
+    {
+      "collection": "request_files",
+      "action": "create",
+      "fields": ["request", "file", "kind", "uploaded_by", "uploaded_at"],
+      "validation": { "uploaded_by": { "_eq": "$CURRENT_USER" } },
+      "_comment": "kind=quote محصور للـ underwriter عبر quote_kind_guard flow"
+    },
+    {
+      "collection": "notifications",
+      "action": "read",
+      "fields": ["*"],
+      "permissions": { "recipient": { "_eq": "$CURRENT_USER" } }
+    },
+    {
+      "collection": "notifications",
+      "action": "update",
+      "fields": ["read"],
+      "permissions": { "recipient": { "_eq": "$CURRENT_USER" } }
+    },
+    {
+      "collection": "app_settings",
+      "action": "read",
+      "fields": ["*"]
+    }
+  ]
+}

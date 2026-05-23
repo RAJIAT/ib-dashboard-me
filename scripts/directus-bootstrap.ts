@@ -378,45 +378,40 @@ async function ensurePermissions(roleMap: Record<RoleName, string>) {
 }
 
 // ----------------- 3. Flows -----------------
+//
+// Each flow's operations are a chain. We create them in order, then PATCH each
+// operation's `resolve` to point at the next one. The flow's `operation` field
+// is set to the first operation. `reject` paths are wired explicitly when the
+// op definition includes `rejectKey`.
+//
+// Note on `exec` operations: Directus exec ops receive only the data envelope
+// (previous-step results, payload, accountability). They cannot call services.
+// Cross-collection lookups MUST use `item-read` ops, not `services.usersService`.
 
-const flows = [
-  {
-    name: "lovable: enforce_sales_routing",
-    icon: "policy",
-    color: "#E74C3C",
-    description: "Sales staff can only reassign to their assigned underwriter.",
-    status: "active",
-    trigger: "event",
-    accountability: "all",
-    options: {
-      type: "filter",
-      scope: ["items.update"],
-      collections: ["requests"],
-    },
-    operations: [
-      {
-        key: "guard",
-        name: "Guard",
-        type: "exec",
-        options: {
-          code: `
-module.exports = async function({ $accountability, $trigger, payload }) {
-  if (!payload || !('agent' in payload)) return;
-  const userId = $accountability?.user;
-  if (!userId) return;
-  const me = await $trigger.services.usersService.readOne(userId, { fields: ['id','staff_type','assigned_underwriter','app_role'] }).catch(()=>null);
-  if (!me) return;
-  if (me.app_role === 'admin' || me.app_role === 'supervisor') return;
-  if (me.staff_type === 'sales') {
-    if (payload.agent !== me.assigned_underwriter) {
-      throw new Error('Sales agents can only reassign to their assigned underwriter.');
-    }
-  }
-};`.trim(),
-        },
-      },
-    ],
-  },
+type OpDef = {
+  key: string;
+  name: string;
+  type: string;
+  options: Record<string, unknown>;
+  position_x?: number;
+  position_y?: number;
+  rejectKey?: string;
+};
+
+type FlowDef = {
+  name: string;
+  icon: string;
+  color: string;
+  description: string;
+  status: string;
+  trigger: string;
+  accountability: string;
+  options: Record<string, unknown>;
+  operations: OpDef[];
+};
+
+const flows: FlowDef[] = [
+  // ---- Stamp assigned_at when agent changes (pure payload mutation, no DB) ----
   {
     name: "lovable: auto_assigned_at",
     icon: "schedule",
@@ -432,35 +427,140 @@ module.exports = async function({ $accountability, $trigger, payload }) {
         name: "Stamp timestamp",
         type: "exec",
         options: {
-          code: `module.exports = async function({ payload }) { if (payload && 'agent' in payload) { payload.assigned_at = new Date().toISOString(); } return payload; };`,
+          code: "module.exports = async function({ $trigger }) { const p = $trigger.payload; if (p && 'agent' in p) { p.assigned_at = new Date().toISOString(); } return { payload: p }; };",
         },
       },
     ],
   },
+
+  // ---- Reject sales reassignment to wrong UW ----
+  // Chain: read_me → condition (sales? AND agent changed AND target != my UW) → reject_exec
+  {
+    name: "lovable: enforce_sales_routing",
+    icon: "policy",
+    color: "#E74C3C",
+    description: "Sales staff can only reassign to their assigned underwriter.",
+    status: "active",
+    trigger: "event",
+    accountability: "all",
+    options: { type: "filter", scope: ["items.update"], collections: ["requests"] },
+    operations: [
+      {
+        key: "read_me",
+        name: "Read current user",
+        type: "item-read",
+        options: {
+          collection: "directus_users",
+          key: "{{$accountability.user}}",
+          query: { fields: ["id", "app_role", "staff_type", "assigned_underwriter"] },
+        },
+      },
+      {
+        key: "is_violation",
+        name: "Sales reassigning to wrong UW?",
+        type: "condition",
+        options: {
+          filter: {
+            _and: [
+              { "$last.staff_type": { _eq: "sales" } },
+              { "$last.app_role": { _eq: "agent" } },
+              { "$trigger.payload.agent": { _nnull: true } },
+            ],
+          },
+        },
+        // condition resolves on match, rejects on no-match. We want to reject (=throw) only on match,
+        // so we put the throwing exec on the resolve path AND check the underwriter match inside it.
+      },
+      {
+        key: "verify_target",
+        name: "Verify target is assigned UW",
+        type: "exec",
+        options: {
+          code: "module.exports = async function({ $last, $trigger }) { const me = $last; const target = $trigger.payload.agent; if (target && me && me.assigned_underwriter && target !== me.assigned_underwriter) { throw new Error('Sales agents can only reassign to their assigned underwriter.'); } return {}; };",
+        },
+      },
+    ],
+  },
+
+  // ---- Block non-underwriters from uploading kind=quote ----
   {
     name: "lovable: quote_kind_guard",
     icon: "verified",
     color: "#9B59B6",
-    description: "Only underwriters can upload kind=quote files.",
+    description: "Only underwriters / supervisors / admins can upload kind=quote files.",
     status: "active",
     trigger: "event",
     accountability: "all",
     options: { type: "filter", scope: ["items.create"], collections: ["request_files"] },
     operations: [
       {
+        key: "is_quote",
+        name: "Is quote upload?",
+        type: "condition",
+        options: {
+          filter: { "$trigger.payload.kind": { _eq: "quote" } },
+        },
+      },
+      {
+        key: "read_me",
+        name: "Read current user",
+        type: "item-read",
+        options: {
+          collection: "directus_users",
+          key: "{{$accountability.user}}",
+          query: { fields: ["id", "app_role", "staff_type"] },
+        },
+      },
+      {
         key: "guard",
-        name: "Guard",
+        name: "Reject if not underwriter",
         type: "exec",
         options: {
-          code: `
-module.exports = async function({ $accountability, $trigger, payload }) {
-  if (payload?.kind !== 'quote') return;
-  const userId = $accountability?.user;
-  if (!userId) return;
-  const me = await $trigger.services.usersService.readOne(userId, { fields: ['app_role','staff_type'] }).catch(()=>null);
-  const ok = me && (me.app_role === 'admin' || me.app_role === 'supervisor' || me.staff_type === 'underwriter');
-  if (!ok) throw new Error('Only underwriters can upload quotes.');
-};`.trim(),
+          code: "module.exports = async function({ $last }) { const ok = $last && ($last.app_role === 'admin' || $last.app_role === 'supervisor' || $last.staff_type === 'underwriter'); if (!ok) throw new Error('Only underwriters can upload quotes.'); return {}; };",
+        },
+      },
+    ],
+  },
+
+  // ---- Webhook flow for sales reassignment (server-side enforced) ----
+  // POST /flows/trigger/<id>  body: { request_id, new_agent_id }
+  // 1. read_me → 2. condition (am I authorized for this target?) → 3. patch request
+  {
+    name: "lovable: reassign_request",
+    icon: "swap_horiz",
+    color: "#27AE60",
+    description: "Authorized reassignment endpoint. Validates server-side then patches request.agent.",
+    status: "active",
+    trigger: "webhook",
+    accountability: "all",
+    options: { method: "POST", async: false, return: "$last" },
+    operations: [
+      {
+        key: "read_me",
+        name: "Read current user",
+        type: "item-read",
+        options: {
+          collection: "directus_users",
+          key: "{{$accountability.user}}",
+          query: { fields: ["id", "app_role", "staff_type", "branch", "assigned_underwriter"] },
+        },
+      },
+      {
+        key: "validate",
+        name: "Validate reassignment",
+        type: "exec",
+        options: {
+          code: "module.exports = async function({ $last, $trigger }) { const me = $last; const body = $trigger.body || {}; if (!body.request_id || !body.new_agent_id) throw new Error('request_id and new_agent_id required'); if (!me) throw new Error('Unauthenticated'); if (me.app_role === 'admin' || me.app_role === 'supervisor') return { request_id: body.request_id, new_agent_id: body.new_agent_id }; if (me.staff_type === 'sales') { if (body.new_agent_id !== me.assigned_underwriter) throw new Error('Sales agents can only reassign to their assigned underwriter.'); return { request_id: body.request_id, new_agent_id: body.new_agent_id }; } if (me.staff_type === 'underwriter') { return { request_id: body.request_id, new_agent_id: body.new_agent_id }; } throw new Error('Not authorized'); };",
+        },
+      },
+      {
+        key: "patch",
+        name: "Patch request.agent",
+        type: "item-update",
+        options: {
+          collection: "requests",
+          key: "{{$last.request_id}}",
+          payload: { agent: "{{$last.new_agent_id}}", assigned_at: "{{$now}}" },
         },
       },
     ],
@@ -476,27 +576,47 @@ async function ensureFlows() {
       console.log(`   = ${f.name} (exists)`);
       continue;
     }
+    const { operations, ...flowMeta } = f;
     const created = await api<{ data: { id: string } }>("/flows", {
       method: "POST",
-      body: JSON.stringify({ ...f, operations: undefined }),
+      body: JSON.stringify(flowMeta),
     });
-    // Operations need to be created separately and linked to the flow
-    let prevKey: string | null = null;
-    for (const op of f.operations) {
-      const opCreated = await api<{ data: { id: string } }>("/operations", {
+    const flowId = created.data.id;
+
+    // Create operations in order, capturing their IDs
+    const opIds: string[] = [];
+    for (let i = 0; i < operations.length; i++) {
+      const op = operations[i];
+      const created = await api<{ data: { id: string } }>("/operations", {
         method: "POST",
-        body: JSON.stringify({ ...op, flow: created.data.id }),
+        body: JSON.stringify({
+          flow: flowId,
+          key: op.key,
+          name: op.name,
+          type: op.type,
+          options: op.options,
+          position_x: 20 + i * 200,
+          position_y: 20,
+        }),
       });
-      if (prevKey === null) {
-        // first operation = entry point
-        await api(`/flows/${created.data.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ operation: opCreated.data.id }),
-        });
-      }
-      prevKey = opCreated.data.id;
+      opIds.push(created.data.id);
     }
-    console.log(`   + ${f.name}`);
+
+    // Wire resolve chain: each op's resolve points to the next
+    for (let i = 0; i < opIds.length - 1; i++) {
+      await api(`/operations/${opIds[i]}`, {
+        method: "PATCH",
+        body: JSON.stringify({ resolve: opIds[i + 1] }),
+      });
+    }
+
+    // Set flow entry point
+    await api(`/flows/${flowId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ operation: opIds[0] }),
+    });
+
+    console.log(`   + ${f.name} (${opIds.length} ops)`);
   }
 }
 

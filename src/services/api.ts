@@ -387,6 +387,7 @@ export async function createAgent(input: {
   id: string; name: string; email?: string; branch?: string;
   role?: AgentRole; staffType?: StaffType;
   supervisorId?: string; password?: string;
+  assignedUnderwriterId?: string;
 }): Promise<Agent> {
   if (!input.email) throw new Error("Email is required");
   if (!input.password || input.password.length < 6) throw new Error("Password (min 6 chars) is required");
@@ -409,6 +410,16 @@ export async function createAgent(input: {
   }
   if (role === "agent" && !staffType) staffType = "underwriter";
 
+  // Validate assignedUnderwriterId — only meaningful for sales agents.
+  let assignedUnderwriterId: string | undefined;
+  if (staffType === "sales" && input.assignedUnderwriterId) {
+    const target = list.find((a) => a.id === input.assignedUnderwriterId);
+    if (!target) throw new Error("Assigned underwriter not found");
+    if (target.staffType !== "underwriter") throw new Error("Assigned target must be an underwriter");
+    if (target.branch !== branch) throw new Error("Assigned underwriter must be in the same branch");
+    assignedUnderwriterId = target.id;
+  }
+
   const settings = getSettings();
   const pending = me?.role === "supervisor" && settings.requireAdminApproval;
 
@@ -420,6 +431,7 @@ export async function createAgent(input: {
     supervisorId: role === "agent"
       ? (input.supervisorId || (me?.role === "supervisor" ? me.id : undefined))
       : undefined,
+    assignedUnderwriterId: staffType === "sales" ? assignedUnderwriterId : undefined,
     createdByUserId: me?.id,
     createdByRole: me?.role,
     pendingApproval: pending || undefined,

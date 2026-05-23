@@ -986,9 +986,21 @@ function ReassignCard({
   // - Admin / supervisor: full pool.
   let candidates = basePool;
   if (isOwner && myType === "sales") {
-    candidates = basePool.filter((a) => a.staffType === "underwriter");
+    // Sales can only send to their single assigned underwriter.
+    candidates = basePool.filter(
+      (a) => a.staffType === "underwriter" && a.id === meAgent?.assignedUnderwriterId,
+    );
   } else if (isOwner && myType === "underwriter") {
     candidates = basePool.filter((a) => a.staffType === "underwriter");
+  } else if (!isOwner && (isAdmin || isBranchSup) && ownerType === "sales") {
+    // Admin/Sup viewing a sales-owned request: still default to that sales' assigned UW
+    // but allow picking any UW in the branch.
+    const ownerAssignedUW = currentOwner?.assignedUnderwriterId;
+    candidates = [...basePool].sort((a, b) => {
+      if (a.id === ownerAssignedUW) return -1;
+      if (b.id === ownerAssignedUW) return 1;
+      return 0;
+    });
   }
 
   const underwriters = candidates.filter((a) => a.staffType === "underwriter");

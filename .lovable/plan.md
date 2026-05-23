@@ -1,87 +1,75 @@
 ## الهدف
 
-إضافة سجل زمني (History/Timeline) لكل طلب يُظهر تفاصيل كل ما حدث عليه — متى وصل من العميل، متى استلمه السيلز، متى حوّله للأندر رايتر، متى رجّعه، أي تغيير في الأندر رايتر، تغيير الحالة، رفع/حذف مستندات، رفع عرض السعر، الملاحظات… إلخ. يظهر للأدمن (والمشرف اختياريًا) داخل صفحة الطلب نفسها.
+ربط كل سيلز بأندررايتر محدد (assigned underwriter) — السيلز برفع الطلب لهذا الأندررايتر فقط، وما يقدر يغيره. الادمن والسوبرفايزر بقدروا يغيروا التعيين متى ما بدهم.
 
-## ما هو موجود حاليًا
+## التغييرات
 
-- `src/services/audit.ts` + `logEvent()` في `src/services/api.ts` يكتبان سجلات في `demoStore` بحقل `entityId` (id الطلب)، مع `before/after/meta`.
-- يتم تسجيل: `request.created`, `request.status_changed`, `request.reassigned`, ودخول/خروج، وأحداث الايجنت.
-- صفحة `audit.tsx` تعرض سجل عام للأدمن، لكن لا يوجد عرض لكل طلب على حدة.
+### 1) موديل البيانات (`src/services/demoStore.ts`)
 
-## الخطة
+- إضافة حقل اختياري على `DemoAgent`:
+  - `assignedUnderwriterId?: string` — مرتبط فقط بالسيلز (`staffType === "sales"`).
+- نفس الحقل بيمر في النوع المُصدَّر من `api.ts` (`Agent`).
 
-### 1) توسيع الأحداث المُسجَّلة (`src/services/api.ts`)
+### 2) منطق الصلاحيات والـ API (`src/services/api.ts`)
 
-إضافة استدعاءات `logEvent` للأحداث التالية إن لم تكن موجودة، وكلها بـ `entityType: "request"` و `entityId = request.id`:
+- **`createAgent`**: لو الدور سيلز، استقبل `assignedUnderwriterId` (اختياري عند الإنشاء، إلزامي بشكل ناعم عبر تحذير في الـ UI لكن مش فاشل تقنياً). تحقق إنه:
+  - الأندررايتر موجود.
+  - `staffType === "underwriter"`.
+  - بنفس الفرع (`branch`).
+- **`updateAgent`**: استقبل `assignedUnderwriterId`. صلاحيات التعديل:
+  - **Admin**: يقدر يعدّل لأي سيلز.
+  - **Supervisor**: فقط لسيلز ضمن فرعه ومش متعمل من الأدمن (نفس قيود الموجودة).
+  - **Sales/Underwriter (نفسه)**: ممنوع — يرجع `Error("Only admin/supervisor can change the assigned underwriter")`.
+- **`reassignRequest`** (تحديث المنطق):
+  - لما السيلز هو الـ caller وبده يحوّل لأندررايتر:
+    - لازم `target.id === salesAgent.assignedUnderwriterId`. لو لأ → `Error("You can only send requests to your assigned underwriter")`.
+  - الادمن/السوبرفايزر/الأندررايتر (handoff) بضلوا يقدروا يحولوا لأي أندررايتر بنفس الفرع زي ما هي.
+- إضافة `logEvent("agent.assigned_underwriter_changed", { before, after })` لما يتغير التعيين.
 
-- `request.document_uploaded` — اسم المستند ونوعه (Emirates/License/Passport/Registration/Vehicle…)، meta: { docKey, fileName, size }
-- `request.document_removed` — meta: { docKey, fileName, byRole }
-- `request.reupload_requested` — لما السيلز/الأندر يطلب إعادة رفع مستند ناقص
-- `request.note_added` — meta: { noteId, snippet }
-- `request.quote_uploaded` / `request.quote_removed`
-- `request.shared_with_customer` — لما يُرسَل عرض السعر/الرابط
-- `request.assigned_to_underwriter` (تمييز عن `reassigned` العامة): meta: { fromSales, toUnderwriter }
-- `request.returned_to_sales`
-- `request.underwriter_changed` — لما الأندر يحوّل لأندر آخر، meta: { fromUnderwriter, toUnderwriter, reason? }
+### 3) واجهة إنشاء/تعديل الأكاونت (`src/components/AgentFormDialog.tsx`)
 
-تحديث `reassignRequest` ليُميّز نوع التحويل (sales→UW / UW→UW / UW→sales) ويختار الـ action المناسبة بدل `request.reassigned` عامة.
+- لما `staffType === "sales"`: اظهر حقل **Assigned Underwriter** (select).
+  - الخيارات: كل أندررايترز نفس الفرع المختار (`branch`) فقط.
+  - يتفرّغ تلقائياً لو تغيّر الفرع.
+- مخفي للأندررايتر والسوبرفايزر.
+- في وضع التعديل: يظهر للأدمن دائماً، وللسوبرفايزر فقط إذا السيلز مش متعمل من الأدمن. مخفي/disabled لباقي الأدوار.
 
-### 2) دالة جلب سجل طلب واحد (`src/services/audit.ts`)
+### 4) صفحة الطلب (`src/routes/requests.$id.tsx`)
 
-إضافة:
-```ts
-export async function fetchRequestHistory(requestId: string): Promise<AuditEntry[]>
-```
-ترجع كل السجلات بـ `entityType==="request" && entityId===requestId` مرتبة من الأقدم للأحدث.
+- في `ReassignCard`:
+  - **لو `myType === "sales"` (السيلز هو المالك)**:
+    - لو عنده `assignedUnderwriterId`: اعرض زر واحد فقط "إرسال الطلب لـ {اسم الأندررايتر}" — بدون قائمة منسدلة.
+    - لو ما عنده تعيين: اعرض رسالة "ما عندك أندررايتر معيّن — تواصل مع المشرف" وعطّل الإرسال.
+  - **Admin/Supervisor**: يضل عندهم القائمة الكاملة (تحويل يدوي لأي أندررايتر بالفرع).
+  - **Underwriter handoff**: بدون تغيير.
+- لما الادمن/السوبرفايزر بشوفوا الطلب وصاحبه سيلز، الـ default المختار يكون الأندررايتر المعيّن لهذا السيلز (لو موجود) بدل أول أندررايتر في الفرع.
 
-### 3) مكوّن Timeline جديد
+### 5) صفحة إدارة الايجنتس (`src/routes/agents.tsx`)
 
-ملف جديد `src/components/RequestHistoryTimeline.tsx`:
+- في الجدول/الكارد، أضف عمود/سطر يبيّن "Assigned UW" لكل سيلز.
+- لو السيلز ما عنده تعيين: badge أصفر "Unassigned" + زر سريع للأدمن/السوبرفايزر يفتح dialog التعديل مباشرة على هذا الحقل.
 
-- يستلم `requestId`.
-- يستخدم `fetchRequestHistory` + `subscribeAudit` ليتحدث لحظيًا.
-- يعرض كل حدث كصف في تايملاين عمودي مع:
-  - أيقونة حسب نوع الحدث (إنشاء، تحويل، تغيير حالة، مستند، ملاحظة…)
-  - النص بالعربية/الإنجليزية حسب اللغة (نضيف ترجمات في `src/i18n/translations.ts`)
-  - الفاعل (الاسم + الدور + الفرع)
-  - الوقت بصيغة محلية + tooltip بالتاريخ الكامل
-  - تفاصيل قابلة للطي تُظهر `before/after` (مثلاً: status: new → processing) و meta (اسم الملف، السبب…)
-- فلتر بسيط (الكل / الحالة / المستندات / التحويلات).
+### 6) الترجمات (`src/i18n/translations.ts`)
 
-### 4) دمج التايملاين في صفحة الطلب
+أضف مفاتيح:
+- `agents.assignedUnderwriter` — "Assigned Underwriter" / "الأندررايتر المعيّن"
+- `agents.assignedUnderwriterHint` — "Sales requests will be routed to this underwriter only" / "طلبات السيلز ستُحوَّل لهذا الأندررايتر فقط"
+- `agents.unassigned` — "Unassigned" / "غير معيّن"
+- `requests.salesMustUseAssignedUW` — رسالة الخطأ.
+- `requests.sendToAssignedUW` — "إرسال إلى {name}".
 
-في `src/routes/requests.$id.tsx`:
+### 7) الهيستوري (`src/components/RequestHistoryTimeline.tsx`)
 
-- إضافة قسم جديد (Card) بعنوان "سجل الطلب / Request history" يظهر فقط للأدمن والمشرف:
-  ```ts
-  {(user.role === "admin" || user.role === "supervisor") && (
-    <RequestHistoryTimeline requestId={req.id} />
-  )}
-  ```
-- يوضع أسفل قسم الإجراءات/الملاحظات.
+- أضف معالجة للـ action الجديد `agent.assigned_underwriter_changed` (للعرض في صفحة الادمن لو احتجناه لاحقاً — حالياً هذا الايفنت `entityType: "agent"` فبيظهر بصفحة الـ audit، مش بصفحة الطلب).
 
-### 5) ترجمات
+## نقاط الصلاحيات (ملخص)
 
-إضافة مفاتيح في `src/i18n/translations.ts` لكل نوع حدث (نص قصير + قالب مع متغيرات مثل `{from}` `{to}` `{name}`).
+| العملية | Admin | Supervisor (نفس الفرع) | Sales | Underwriter |
+|---|---|---|---|---|
+| تعيين/تغيير الأندررايتر للسيلز | ✅ | ✅ (لسيلز مش متعمل من أدمن) | ❌ | ❌ |
+| رفع طلب لأندررايتر | لأي UW | لأي UW بالفرع | فقط للـ assigned UW | — |
+| تحويل بين أندررايترز | ✅ | ✅ | ❌ | ✅ (handoff) |
 
-### 6) Backfill للطلبات الموجودة
+## بيانات الديمو
 
-السجل الحالي يبدأ من اللحظة التي تُضاف فيها هذه التعديلات؛ الطلبات القديمة ستُظهر فقط الأحداث الموجودة مسبقًا (created/status_changed/reassigned). نُضيف ملاحظة في أعلى التايملاين تقول "بعض الأحداث قبل هذا التاريخ قد لا تكون مسجلة" عند غياب حدث `request.created`.
-
-## ملاحظات تقنية
-
-- الأحداث تُخزّن حاليًا في الـ demoStore (localStorage) بسقف 500. سنرفع السقف إلى 5000 لأن أحداث المستندات/التحويلات أكثر تكرارًا.
-- لا حاجة لتغييرات في قاعدة البيانات في هذه المرحلة (المشروع يستعمل demoStore للحالة العملياتية). إن أردت لاحقًا حفظ الـ audit في Lovable Cloud (Supabase) لجعله مشتركًا بين الأجهزة، يمكن إضافة جدول `request_events` لاحقًا.
-
-## ملفات ستُعدَّل / تُنشأ
-
-- تعديل: `src/services/api.ts` (إضافة استدعاءات logEvent للأحداث الناقصة + تمييز أنواع reassign)
-- تعديل: `src/services/audit.ts` (دالة `fetchRequestHistory` + توسعة `AuditAction`)
-- تعديل: `src/services/demoStore.ts` (سقف 500 → 5000)
-- جديد: `src/components/RequestHistoryTimeline.tsx`
-- تعديل: `src/routes/requests.$id.tsx` (دمج المكوّن للأدمن/المشرف)
-- تعديل: `src/i18n/translations.ts` (نصوص الأحداث)
-
-## سؤال قبل التنفيذ
-
-هل تريد التايملاين يظهر **للأدمن والمشرف فقط**، أم أيضًا للمالك (السيلز/الأندر رايتر صاحب الطلب)؟
+- تحديث الـ seed في `demoStore.ts`: SLS-001 → assignedUnderwriterId: "UW-001"، SLS-002 → "UW-002"، SLS-003 → "UW-003" — حتى السلوك الجديد يكون مرئي مباشرة في الديمو.

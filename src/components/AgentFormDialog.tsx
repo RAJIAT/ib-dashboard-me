@@ -41,11 +41,13 @@ export function AgentFormDialog({
     role: lockedRole ?? defaultRole ?? "agent",
     staffType: lockedStaffType ?? defaultStaffType ?? "underwriter",
     supervisorId: "",
+    assignedUnderwriterId: "",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const supervisors = useMemo(() => listAgents().filter((a) => a.role === "supervisor"), [open]);
+  const allAgents = useMemo(() => listAgents(), [open]);
 
   const [branches, setBranches] = useState<string[]>(() => listBranches());
 
@@ -62,6 +64,7 @@ export function AgentFormDialog({
       role: lockedRole ?? initial?.role ?? defaultRole ?? "agent",
       staffType: lockedStaffType ?? initial?.staffType ?? defaultStaffType ?? "underwriter",
       supervisorId: initial?.supervisorId ?? "",
+      assignedUnderwriterId: initial?.assignedUnderwriterId ?? "",
     });
   }, [open, initial, lockedBranch, lockedRole, defaultRole, lockedStaffType, defaultStaffType]);
 

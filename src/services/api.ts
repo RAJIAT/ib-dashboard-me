@@ -507,6 +507,7 @@ export async function updateAgent(id: string, patch: Partial<{
     const cur = list.find((a) => a.id === nextAssignedUW);
     if (!cur || cur.branch !== nextBranch) nextAssignedUW = undefined;
   }
+  const nextStaffType = patch.staffType ?? before.staffType;
   next[idx] = {
     ...before,
     name: patch.name ?? before.name,
@@ -514,11 +515,9 @@ export async function updateAgent(id: string, patch: Partial<{
     branch: nextBranch,
     active: patch.active ?? before.active,
     role: patch.role ?? before.role,
-    staffType: patch.staffType ?? before.staffType,
+    staffType: nextStaffType,
     supervisorId: patch.supervisorId === null ? undefined : (patch.supervisorId ?? before.supervisorId),
-    assignedUnderwriterId: next[idx]?.staffType === "sales" || (patch.staffType ?? before.staffType) === "sales"
-      ? nextAssignedUW
-      : undefined,
+    assignedUnderwriterId: nextStaffType === "sales" ? nextAssignedUW : undefined,
   };
   dsSetAgents(next);
 

@@ -67,6 +67,7 @@ export type Agent = {
   role?: AgentRole;
   staffType?: StaffType;
   supervisorId?: string;
+  assignedUnderwriterId?: string;
   createdByUserId?: string;
   createdByRole?: Role;
   pendingApproval?: boolean;
@@ -386,6 +387,7 @@ export async function createAgent(input: {
   id: string; name: string; email?: string; branch?: string;
   role?: AgentRole; staffType?: StaffType;
   supervisorId?: string; password?: string;
+  assignedUnderwriterId?: string;
 }): Promise<Agent> {
   if (!input.email) throw new Error("Email is required");
   if (!input.password || input.password.length < 6) throw new Error("Password (min 6 chars) is required");
@@ -408,6 +410,16 @@ export async function createAgent(input: {
   }
   if (role === "agent" && !staffType) staffType = "underwriter";
 
+  // Validate assignedUnderwriterId — only meaningful for sales agents.
+  let assignedUnderwriterId: string | undefined;
+  if (staffType === "sales" && input.assignedUnderwriterId) {
+    const target = list.find((a) => a.id === input.assignedUnderwriterId);
+    if (!target) throw new Error("Assigned underwriter not found");
+    if (target.staffType !== "underwriter") throw new Error("Assigned target must be an underwriter");
+    if (target.branch !== branch) throw new Error("Assigned underwriter must be in the same branch");
+    assignedUnderwriterId = target.id;
+  }
+
   const settings = getSettings();
   const pending = me?.role === "supervisor" && settings.requireAdminApproval;
 
@@ -419,6 +431,7 @@ export async function createAgent(input: {
     supervisorId: role === "agent"
       ? (input.supervisorId || (me?.role === "supervisor" ? me.id : undefined))
       : undefined,
+    assignedUnderwriterId: staffType === "sales" ? assignedUnderwriterId : undefined,
     createdByUserId: me?.id,
     createdByRole: me?.role,
     pendingApproval: pending || undefined,
@@ -452,6 +465,7 @@ export async function createAgent(input: {
 export async function updateAgent(id: string, patch: Partial<{
   name: string; email: string | null; branch: string | null; active: boolean; supervisorId: string | null;
   role: AgentRole; staffType: StaffType; password: string;
+  assignedUnderwriterId: string | null;
 }>): Promise<Agent> {
   const list = dsGetAgents();
   const idx = list.findIndex((a) => a.id === id || a.userId === id);
@@ -466,16 +480,44 @@ export async function updateAgent(id: string, patch: Partial<{
     if (patch.role !== undefined && patch.role !== before.role) throw new Error("Supervisors cannot change role");
   }
 
+  // Only admin / supervisor can change the assigned underwriter for a sales agent.
+  if (patch.assignedUnderwriterId !== undefined) {
+    if (me?.role !== "admin" && me?.role !== "supervisor") {
+      throw new Error("Only admin or supervisor can change the assigned underwriter");
+    }
+    if (before.staffType !== "sales") {
+      throw new Error("Assigned underwriter only applies to sales agents");
+    }
+    if (patch.assignedUnderwriterId) {
+      const target = list.find((a) => a.id === patch.assignedUnderwriterId);
+      if (!target) throw new Error("Assigned underwriter not found");
+      if (target.staffType !== "underwriter") throw new Error("Assigned target must be an underwriter");
+      const targetBranch = patch.branch ?? before.branch;
+      if (target.branch !== targetBranch) throw new Error("Assigned underwriter must be in the same branch");
+    }
+  }
+
   const next = [...list];
+  const nextBranch = patch.branch === null ? undefined : (patch.branch ?? before.branch);
+  // If branch changes and the previously assigned UW is no longer in the same branch, clear it.
+  let nextAssignedUW = before.assignedUnderwriterId;
+  if (patch.assignedUnderwriterId !== undefined) {
+    nextAssignedUW = patch.assignedUnderwriterId === null ? undefined : patch.assignedUnderwriterId;
+  } else if (nextBranch !== before.branch && nextAssignedUW) {
+    const cur = list.find((a) => a.id === nextAssignedUW);
+    if (!cur || cur.branch !== nextBranch) nextAssignedUW = undefined;
+  }
+  const nextStaffType = patch.staffType ?? before.staffType;
   next[idx] = {
     ...before,
     name: patch.name ?? before.name,
     email: patch.email === null ? undefined : (patch.email ?? before.email),
-    branch: patch.branch === null ? undefined : (patch.branch ?? before.branch),
+    branch: nextBranch,
     active: patch.active ?? before.active,
     role: patch.role ?? before.role,
-    staffType: patch.staffType ?? before.staffType,
+    staffType: nextStaffType,
     supervisorId: patch.supervisorId === null ? undefined : (patch.supervisorId ?? before.supervisorId),
+    assignedUnderwriterId: nextStaffType === "sales" ? nextAssignedUW : undefined,
   };
   dsSetAgents(next);
 
@@ -493,9 +535,17 @@ export async function updateAgent(id: string, patch: Partial<{
   }
 
   const changed: string[] = [];
-  (["name","email","branch","active","role","staffType","supervisorId"] as const).forEach((k) => {
+  (["name","email","branch","active","role","staffType","supervisorId","assignedUnderwriterId"] as const).forEach((k) => {
     if ((patch as any)[k] !== undefined && (before as any)[k] !== (next[idx] as any)[k]) changed.push(k);
   });
+  if (changed.includes("assignedUnderwriterId")) {
+    logEvent({
+      action: "agent.assigned_underwriter_changed",
+      entityType: "agent", entityId: next[idx].id, entityLabel: next[idx].name, branch: next[idx].branch,
+      before: { assignedUnderwriterId: before.assignedUnderwriterId },
+      after: { assignedUnderwriterId: next[idx].assignedUnderwriterId },
+    });
+  }
   logEvent({
     action: "agent.updated",
     entityType: "agent", entityId: next[idx].id, entityLabel: next[idx].name, branch: next[idx].branch,
@@ -636,6 +686,20 @@ export async function reassignRequest(requestId: string, newAgentId: string): Pr
   const isBranchSup = me.role === "supervisor" && me.branch === req.branch;
   const isOwner = me.role === "agent" && me.agentId === req.agentId;
   if (!isAdmin && !isBranchSup && !isOwner) throw new Error("Not allowed");
+
+  // Sales agents can only send their requests to their own assigned underwriter.
+  if (isOwner && me.role === "agent") {
+    const meAgent = agents.find((a) => a.id === me.agentId);
+    if (meAgent?.staffType === "sales" && target.staffType === "underwriter") {
+      if (!meAgent.assignedUnderwriterId) {
+        throw new Error("You don't have an assigned underwriter — contact your supervisor");
+      }
+      if (target.id !== meAgent.assignedUnderwriterId) {
+        throw new Error("You can only send requests to your assigned underwriter");
+      }
+    }
+  }
+
   if (target.id === req.agentId) return req; // no-op
 
   const previousOwner = agents.find((a) => a.id === req.agentId);

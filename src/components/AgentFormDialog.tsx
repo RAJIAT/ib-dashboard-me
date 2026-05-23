@@ -12,6 +12,7 @@ export type AgentFormValues = {
   role: AgentRole;
   staffType?: StaffType;
   supervisorId?: string;
+  assignedUnderwriterId?: string;
 };
 
 export function AgentFormDialog({
@@ -40,11 +41,13 @@ export function AgentFormDialog({
     role: lockedRole ?? defaultRole ?? "agent",
     staffType: lockedStaffType ?? defaultStaffType ?? "underwriter",
     supervisorId: "",
+    assignedUnderwriterId: "",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const supervisors = useMemo(() => listAgents().filter((a) => a.role === "supervisor"), [open]);
+  const allAgents = useMemo(() => listAgents(), [open]);
 
   const [branches, setBranches] = useState<string[]>(() => listBranches());
 
@@ -61,6 +64,7 @@ export function AgentFormDialog({
       role: lockedRole ?? initial?.role ?? defaultRole ?? "agent",
       staffType: lockedStaffType ?? initial?.staffType ?? defaultStaffType ?? "underwriter",
       supervisorId: initial?.supervisorId ?? "",
+      assignedUnderwriterId: initial?.assignedUnderwriterId ?? "",
     });
   }, [open, initial, lockedBranch, lockedRole, defaultRole, lockedStaffType, defaultStaffType]);
 
@@ -213,8 +217,29 @@ export function AgentFormDialog({
             </Field>
           </div>
 
+          {((lockedRole ?? values.role) === "agent") && ((lockedStaffType ?? values.staffType) === "sales") && (
+            <Field label={t.agents.assignedUnderwriter ?? "Assigned Underwriter"}>
+              <select
+                value={values.assignedUnderwriterId ?? ""}
+                onChange={(e) => setValues((v) => ({ ...v, assignedUnderwriterId: e.target.value }))}
+                className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground"
+              >
+                <option value="">{t.agents.unassigned ?? "— Unassigned —"}</option>
+                {allAgents
+                  .filter((a) => a.role === "agent" && a.staffType === "underwriter" && a.active && a.branch === values.branch)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>{a.name} · {a.id}</option>
+                  ))}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t.agents.assignedUnderwriterHint ?? "Sales requests will be routed to this underwriter only."}
+              </p>
+            </Field>
+          )}
 
           {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+
+
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <button

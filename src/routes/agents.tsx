@@ -102,6 +102,7 @@ function AdminAgents() {
       role: isSupervisor ? "agent" : v.role,
       staffType: (v.role === "agent" || isSupervisor) ? (v.staffType ?? (effectiveTab === "sales" ? "sales" : "underwriter")) : undefined,
       supervisorId: v.supervisorId || undefined,
+      assignedUnderwriterId: v.assignedUnderwriterId || undefined,
     });
     toast.success(t.agents.created);
   };
@@ -109,12 +110,14 @@ function AdminAgents() {
   const onEdit = async (v: AgentFormValues) => {
     if (!dialog.target) return;
     try {
+      const isSales = (v.role === "agent") && (v.staffType === "sales");
       await updateAgent(dialog.target.id, {
         name: v.name,
         branch: isSupervisor ? undefined : v.branch,
         email: v.email,
         staffType: v.role === "agent" ? v.staffType : undefined,
         supervisorId: v.supervisorId ? v.supervisorId : null,
+        ...(isSales ? { assignedUnderwriterId: v.assignedUnderwriterId ? v.assignedUnderwriterId : null } : {}),
         ...(v.password ? { password: v.password } : {}),
       });
       toast.success(t.agents.updated);

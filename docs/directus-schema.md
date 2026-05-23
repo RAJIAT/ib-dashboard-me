@@ -158,15 +158,21 @@ bun run scripts/directus-seed.ts               # users + branches + sample reque
 
 ## 3. Flows (المنطق المشروط)
 
-| Flow | Trigger | Logic |
+> **مهم**: عمليات `exec` في Directus ما عندها وصول لـ services. أي قراءة من DB لازم تكون عبر `item-read` operation. الـ flows أدناه multi-step chains مع `resolve` pointers.
+
+| Flow | Trigger | Chain |
 |---|---|---|
-| `enforce_sales_routing` | `requests.items.update` (filter, blocking) | لو `$accountability.user.staff_type = sales` و`agent` تغيّر → لازم `payload.agent = user.assigned_underwriter` وإلا exception. |
-| `enforce_underwriter_target` | `requests.items.update` (filter, blocking) | لو `staff_type = underwriter` و`agent` تغيّر → التارجت underwriter بنفس الفرع، أو `origin_agent` (إرجاع للسيلز). |
-| `auto_assign_at` | `requests.items.update` (filter) | لو `agent` تغيّر → set `assigned_at = $NOW`. |
-| `notify_on_assign` | `requests.items.update` (action, async) | ينشئ notification للمستلم الجديد. |
-| `audit_logger` | عدة أحداث (`requests.items.*`, `directus_users.items.*`) | يكتب صف بـ `audit_log`. |
-| `approval_gate` | `users.create` (filter) | لو `require_admin_approval=true` → set `pending_approval=true`، notify admins. |
-| `quote_kind_guard` | `request_files.items.create` (filter, blocking) | لو `kind=quote` لازم actor يكون underwriter. |
+| `lovable: auto_assigned_at` | `requests.items.update` (filter) | `exec` → يضيف `assigned_at = now()` لو `agent` تغيّر |
+| `lovable: enforce_sales_routing` | `requests.items.update` (filter, blocking) | `item-read` (me) → `condition` (sales+agent changed) → `exec` (throw if target ≠ assigned_underwriter) |
+| `lovable: quote_kind_guard` | `request_files.items.create` (filter, blocking) | `condition` (kind=quote) → `item-read` (me) → `exec` (throw if not UW) |
+| `lovable: reassign_request` | **webhook** `POST /flows/trigger/<id>` | `item-read` (me) → `exec` (validate role+target) → `item-update` (patch request.agent + assigned_at) |
+
+**Reassignment flow هو الـ entry الوحيد لتعديل `requests.agent`** للـ agents — صلاحية `requests.update` للـ agent ما تشمل حقل `agent`. السيرفر هو اللي يقرّر.
+
+الفرونت ينادي:
+```ts
+await dxReassignRequest(requestId, newAgentId, await dxFindReassignFlowId());
+```
 
 ---
 

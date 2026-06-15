@@ -51,7 +51,9 @@ async function downloadAsset(url: string, filename: string): Promise<void> {
   }
 }
 
+import { requireAuth } from "@/lib/routeAuth";
 export const Route = createFileRoute("/requests/$id")({
+  beforeLoad: requireAuth(),
   component: RequestDetails,
 });
 

@@ -17,7 +17,9 @@ import {
   subscribeAgents, updateAgent, type Agent, type AgentRole, type AuthUser, type StaffType,
 } from "@/services/api";
 
+import { requireAuth } from "@/lib/routeAuth";
 export const Route = createFileRoute("/agents")({
+  beforeLoad: requireAuth({ roles: ["admin", "supervisor"] }),
   component: AdminAgents,
 });
 

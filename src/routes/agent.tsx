@@ -9,7 +9,9 @@ import { useLang } from "@/i18n/LanguageProvider";
 import { useRequestsLive } from "@/hooks/useRequestsLive";
 import { getCurrentUser, refreshCurrentUser, listAgents, type AuthUser } from "@/services/api";
 
+import { requireAuth } from "@/lib/routeAuth";
 export const Route = createFileRoute("/agent")({
+  beforeLoad: requireAuth(),
   component: AgentDashboard,
 });
 

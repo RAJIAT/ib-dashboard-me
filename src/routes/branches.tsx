@@ -13,7 +13,9 @@ import {
 } from "@/services/api";
 import type { DxBranch } from "@/services/directus";
 
+import { requireAuth } from "@/lib/routeAuth";
 export const Route = createFileRoute("/branches")({
+  beforeLoad: requireAuth({ roles: ["admin"] }),
   component: BranchesPage,
 });
 

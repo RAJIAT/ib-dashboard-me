@@ -15,7 +15,9 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
+import { requireAuth } from "@/lib/routeAuth";
 export const Route = createFileRoute("/admin")({
+  beforeLoad: requireAuth({ roles: ["admin", "supervisor"] }),
   component: AdminDashboard,
 });
 

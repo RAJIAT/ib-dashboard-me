@@ -331,10 +331,66 @@ async function ensureRoles(): Promise<Record<RoleName, string>> {
   return map;
 }
 
-async function ensurePermissions(roleMap: Record<RoleName, string>) {
-  console.log("\n🔐 Permissions…");
-  // Wipe existing app-managed permissions for these roles, then recreate.
-  // Mark app-managed by stamping comment field.
+// ----------------- 2b. Policies + Access + Permissions (Directus v12) -----------------
+//
+// v12 separates Roles from authorization:
+//   - Policies hold the permissions
+//   - Access records link a Role (or User) to a Policy
+//   - Permissions belong to a Policy, NOT a Role
+//
+// We create one policy per app role, link via /access, then create permissions
+// against the policy. All bootstrap-managed records are tagged for idempotency.
+
+const POLICY_PREFIX = "lovable: ";
+
+async function ensurePolicies(
+  roleMap: Record<RoleName, string>,
+): Promise<Record<RoleName, string>> {
+  console.log("\n📜 Policies…");
+  const existing = await api<{ data: Array<{ id: string; name: string }> }>(
+    "/policies?limit=-1",
+  );
+  const map = {} as Record<RoleName, string>;
+
+  for (const name of ROLE_NAMES) {
+    const policyName = `${POLICY_PREFIX}${name}`;
+    const found = existing.data.find((p) => p.name === policyName);
+    if (found) {
+      map[name] = found.id;
+      console.log(`   = ${policyName}`);
+    } else {
+      const created = await api<{ data: { id: string } }>("/policies", {
+        method: "POST",
+        body: JSON.stringify({
+          name: policyName,
+          icon: "policy",
+          description: `App policy for ${name}`,
+          app_access: true,
+          admin_access: name === "Admin",
+          enforce_tfa: false,
+        }),
+      });
+      map[name] = created.data.id;
+      console.log(`   + ${policyName}`);
+    }
+
+    // Ensure an Access record links the role → policy
+    const accessExisting = await api<{ data: Array<{ id: string }> }>(
+      `/access?filter[role][_eq]=${roleMap[name]}&filter[policy][_eq]=${map[name]}&limit=1`,
+    );
+    if (!accessExisting.data.length) {
+      await api("/access", {
+        method: "POST",
+        body: JSON.stringify({ role: roleMap[name], policy: map[name], sort: 1 }),
+      });
+      console.log(`     ↳ access linked ${name} → policy`);
+    }
+  }
+  return map;
+}
+
+async function ensurePermissions(policyMap: Record<RoleName, string>) {
+  console.log("\n🔐 Permissions (attached to policies)…");
   const existing = await api<{ data: Array<{ id: number; comment: string | null }> }>(
     "/permissions?limit=-1&filter[comment][_eq]=lovable-bootstrap",
   );
@@ -363,7 +419,7 @@ async function ensurePermissions(roleMap: Record<RoleName, string>) {
       await api("/permissions", {
         method: "POST",
         body: JSON.stringify({
-          role: roleMap[role],
+          policy: policyMap[role], // v12: policy, not role
           collection,
           action,
           fields: fields ?? ["*"],
@@ -376,6 +432,7 @@ async function ensurePermissions(roleMap: Record<RoleName, string>) {
     }
   }
 }
+
 
 // ----------------- 3. Flows -----------------
 //
@@ -565,7 +622,254 @@ const flows: FlowDef[] = [
       },
     ],
   },
+
+  // ---- Notification: new request created ----
+  {
+    name: "lovable: notify_request_created",
+    icon: "notifications_active",
+    color: "#2ECC71",
+    description: "Notifies assigned agent + supervisors when a request is created.",
+    status: "active",
+    trigger: "event",
+    accountability: "all",
+    options: { type: "action", scope: ["items.create"], collections: ["requests"] },
+    operations: [
+      {
+        key: "notify",
+        name: "Create notification",
+        type: "item-create",
+        options: {
+          collection: "notifications",
+          payload: {
+            recipient: "{{$trigger.payload.agent}}",
+            kind: "request_new",
+            title: "New request",
+            body: "Request {{$trigger.key}} assigned to you.",
+            link: "/requests/{{$trigger.key}}",
+            read: false,
+          },
+        },
+      },
+    ],
+  },
+
+  // ---- Notification: status changed ----
+  {
+    name: "lovable: notify_status_change",
+    icon: "campaign",
+    color: "#F39C12",
+    description: "Notifies request owner when status changes.",
+    status: "active",
+    trigger: "event",
+    accountability: "all",
+    options: { type: "action", scope: ["items.update"], collections: ["requests"] },
+    operations: [
+      {
+        key: "is_status_change",
+        name: "Status changed?",
+        type: "condition",
+        options: { filter: { "$trigger.payload.status": { _nnull: true } } },
+      },
+      {
+        key: "read_req",
+        name: "Read full request",
+        type: "item-read",
+        options: {
+          collection: "requests",
+          key: "{{$trigger.keys[0]}}",
+          query: { fields: ["id", "agent", "status"] },
+        },
+      },
+      {
+        key: "notify",
+        name: "Create notification",
+        type: "item-create",
+        options: {
+          collection: "notifications",
+          payload: {
+            recipient: "{{$last.agent}}",
+            kind: "request_status",
+            title: "Request status updated",
+            body: "Request {{$last.id}} → {{$last.status}}",
+            link: "/requests/{{$last.id}}",
+            read: false,
+          },
+        },
+      },
+    ],
+  },
+
+  // ---- Audit: write entry for every request mutation ----
+  {
+    name: "lovable: audit_request_changes",
+    icon: "history",
+    color: "#7F8C8D",
+    description: "Writes an audit_log row for request create/update/delete.",
+    status: "active",
+    trigger: "event",
+    accountability: "all",
+    options: { type: "action", scope: ["items.create", "items.update", "items.delete"], collections: ["requests"] },
+    operations: [
+      {
+        key: "build",
+        name: "Build audit payload",
+        type: "exec",
+        options: {
+          code: "module.exports = async function({ $trigger, $accountability }) { const action = $trigger.event === 'items.create' ? 'request.created' : ($trigger.event === 'items.delete' ? 'request.deleted' : 'request.status_changed'); return { ts: new Date().toISOString(), actor: $accountability?.user || null, action, entity_type: 'request', entity_id: String($trigger.key || ($trigger.keys && $trigger.keys[0]) || ''), after: $trigger.payload || null }; };",
+        },
+      },
+      {
+        key: "write",
+        name: "Insert audit row",
+        type: "item-create",
+        options: { collection: "audit_log", payload: "{{$last}}" },
+      },
+    ],
+  },
+
+  // ---- Audit: file upload (request_files create) ----
+  {
+    name: "lovable: audit_file_upload",
+    icon: "upload_file",
+    color: "#95A5A6",
+    description: "Writes audit_log row when a request_files row is created.",
+    status: "active",
+    trigger: "event",
+    accountability: "all",
+    options: { type: "action", scope: ["items.create"], collections: ["request_files"] },
+    operations: [
+      {
+        key: "write",
+        name: "Insert audit row",
+        type: "item-create",
+        options: {
+          collection: "audit_log",
+          payload: {
+            ts: "{{$now}}",
+            actor: "{{$accountability.user}}",
+            action: "request.document_uploaded",
+            entity_type: "request",
+            entity_id: "{{$trigger.payload.request}}",
+            after: { kind: "{{$trigger.payload.kind}}", file: "{{$trigger.payload.file}}" },
+          },
+        },
+      },
+    ],
+  },
+
+  // ---- Workflow: user pending approval (signup) ----
+  {
+    name: "lovable: notify_user_pending",
+    icon: "person_add",
+    color: "#E67E22",
+    description: "When a user is created with pending_approval=true, notify all admins.",
+    status: "active",
+    trigger: "event",
+    accountability: "all",
+    options: { type: "action", scope: ["users.create"], collections: [] },
+    operations: [
+      {
+        key: "is_pending",
+        name: "Pending approval?",
+        type: "condition",
+        options: { filter: { "$trigger.payload.pending_approval": { _eq: true } } },
+      },
+      {
+        key: "find_admins",
+        name: "Find admin users",
+        type: "item-read",
+        options: {
+          collection: "directus_users",
+          query: { filter: { app_role: { _eq: "admin" } }, fields: ["id"], limit: 50 },
+        },
+      },
+      {
+        key: "fanout",
+        name: "Create one notification per admin",
+        type: "exec",
+        options: {
+          code: "module.exports = async function({ $last, $trigger, services, getSchema, accountability }) { const { ItemsService } = services; const schema = await getSchema(); const ns = new ItemsService('notifications', { schema, accountability: { admin: true } }); const admins = Array.isArray($last) ? $last : []; const rows = admins.map(a => ({ recipient: a.id, kind: 'user_pending', title: 'New user pending approval', body: ($trigger.payload && $trigger.payload.email) || 'New signup', link: '/agents', read: false })); if (rows.length) await ns.createMany(rows); return { count: rows.length }; };",
+        },
+      },
+    ],
+  },
+
+  // ---- Workflow: user approved → notify user ----
+  {
+    name: "lovable: notify_user_approved",
+    icon: "verified_user",
+    color: "#27AE60",
+    description: "When pending_approval flips from true→false, notify the user.",
+    status: "active",
+    trigger: "event",
+    accountability: "all",
+    options: { type: "action", scope: ["users.update"], collections: [] },
+    operations: [
+      {
+        key: "is_approval",
+        name: "Approved now?",
+        type: "condition",
+        options: { filter: { "$trigger.payload.pending_approval": { _eq: false } } },
+      },
+      {
+        key: "notify",
+        name: "Notify the approved user",
+        type: "item-create",
+        options: {
+          collection: "notifications",
+          payload: {
+            recipient: "{{$trigger.keys[0]}}",
+            kind: "user_approved",
+            title: "Your account is approved",
+            body: "You can now sign in.",
+            link: "/login",
+            read: false,
+          },
+        },
+      },
+    ],
+  },
+
+  // ---- Webhook flow: removal_request — supervisor asks admin to remove a user ----
+  {
+    name: "lovable: removal_request",
+    icon: "person_remove",
+    color: "#C0392B",
+    description: "POST /flows/trigger/<id> body: { agent_user_id, reason }. Notifies all admins.",
+    status: "active",
+    trigger: "webhook",
+    accountability: "all",
+    options: { method: "POST", async: false, return: "$last" },
+    operations: [
+      {
+        key: "validate",
+        name: "Validate body",
+        type: "exec",
+        options: {
+          code: "module.exports = async function({ $trigger, $accountability }) { const b = $trigger.body || {}; if (!b.agent_user_id) throw new Error('agent_user_id required'); if (!$accountability || !$accountability.user) throw new Error('Unauthenticated'); return { agent_user_id: b.agent_user_id, reason: b.reason || '', requested_by: $accountability.user }; };",
+        },
+      },
+      {
+        key: "find_admins",
+        name: "Find admins",
+        type: "item-read",
+        options: {
+          collection: "directus_users",
+          query: { filter: { app_role: { _eq: "admin" } }, fields: ["id"], limit: 50 },
+        },
+      },
+      {
+        key: "fanout",
+        name: "Notify admins + audit",
+        type: "exec",
+        options: {
+          code: "module.exports = async function({ $last, $trigger, services, getSchema }) { const { ItemsService } = services; const schema = await getSchema(); const ns = new ItemsService('notifications', { schema, accountability: { admin: true } }); const as = new ItemsService('audit_log', { schema, accountability: { admin: true } }); const v = $trigger.exec && $trigger.exec.validate ? $trigger.exec.validate : null; const admins = Array.isArray($last) ? $last : []; const rows = admins.map(a => ({ recipient: a.id, kind: 'removal_requested', title: 'User removal requested', body: (v && v.reason) || 'Removal requested', link: '/agents', read: false })); if (rows.length) await ns.createMany(rows); await as.createOne({ ts: new Date().toISOString(), actor: v && v.requested_by, action: 'agent.removal_requested', entity_type: 'agent', entity_id: v && v.agent_user_id, meta: { reason: v && v.reason } }); return { notified: rows.length }; };",
+        },
+      },
+    ],
+  },
 ];
+
 
 async function ensureFlows() {
   console.log("\n⚡ Flows…");
@@ -628,7 +932,8 @@ async function main() {
   await ensureUserFields();
   await ensureRelations();
   const roleMap = await ensureRoles();
-  await ensurePermissions(roleMap);
+  const policyMap = await ensurePolicies(roleMap);
+  await ensurePermissions(policyMap);
   await ensureFlows();
   console.log("\n✅ Done. Run scripts/directus-seed.ts next to add demo data.");
 }

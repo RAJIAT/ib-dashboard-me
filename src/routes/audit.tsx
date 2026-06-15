@@ -12,7 +12,9 @@ import {
   type AuditEntry, type AuditAction, type AuditEntityType,
 } from "@/services/audit";
 
+import { requireAuth } from "@/lib/routeAuth";
 export const Route = createFileRoute("/audit")({
+  beforeLoad: requireAuth({ roles: ["admin", "supervisor"] }),
   component: AuditPage,
 });
 

@@ -331,10 +331,66 @@ async function ensureRoles(): Promise<Record<RoleName, string>> {
   return map;
 }
 
-async function ensurePermissions(roleMap: Record<RoleName, string>) {
-  console.log("\n🔐 Permissions…");
-  // Wipe existing app-managed permissions for these roles, then recreate.
-  // Mark app-managed by stamping comment field.
+// ----------------- 2b. Policies + Access + Permissions (Directus v12) -----------------
+//
+// v12 separates Roles from authorization:
+//   - Policies hold the permissions
+//   - Access records link a Role (or User) to a Policy
+//   - Permissions belong to a Policy, NOT a Role
+//
+// We create one policy per app role, link via /access, then create permissions
+// against the policy. All bootstrap-managed records are tagged for idempotency.
+
+const POLICY_PREFIX = "lovable: ";
+
+async function ensurePolicies(
+  roleMap: Record<RoleName, string>,
+): Promise<Record<RoleName, string>> {
+  console.log("\n📜 Policies…");
+  const existing = await api<{ data: Array<{ id: string; name: string }> }>(
+    "/policies?limit=-1",
+  );
+  const map = {} as Record<RoleName, string>;
+
+  for (const name of ROLE_NAMES) {
+    const policyName = `${POLICY_PREFIX}${name}`;
+    const found = existing.data.find((p) => p.name === policyName);
+    if (found) {
+      map[name] = found.id;
+      console.log(`   = ${policyName}`);
+    } else {
+      const created = await api<{ data: { id: string } }>("/policies", {
+        method: "POST",
+        body: JSON.stringify({
+          name: policyName,
+          icon: "policy",
+          description: `App policy for ${name}`,
+          app_access: true,
+          admin_access: name === "Admin",
+          enforce_tfa: false,
+        }),
+      });
+      map[name] = created.data.id;
+      console.log(`   + ${policyName}`);
+    }
+
+    // Ensure an Access record links the role → policy
+    const accessExisting = await api<{ data: Array<{ id: string }> }>(
+      `/access?filter[role][_eq]=${roleMap[name]}&filter[policy][_eq]=${map[name]}&limit=1`,
+    );
+    if (!accessExisting.data.length) {
+      await api("/access", {
+        method: "POST",
+        body: JSON.stringify({ role: roleMap[name], policy: map[name], sort: 1 }),
+      });
+      console.log(`     ↳ access linked ${name} → policy`);
+    }
+  }
+  return map;
+}
+
+async function ensurePermissions(policyMap: Record<RoleName, string>) {
+  console.log("\n🔐 Permissions (attached to policies)…");
   const existing = await api<{ data: Array<{ id: number; comment: string | null }> }>(
     "/permissions?limit=-1&filter[comment][_eq]=lovable-bootstrap",
   );
@@ -363,7 +419,7 @@ async function ensurePermissions(roleMap: Record<RoleName, string>) {
       await api("/permissions", {
         method: "POST",
         body: JSON.stringify({
-          role: roleMap[role],
+          policy: policyMap[role], // v12: policy, not role
           collection,
           action,
           fields: fields ?? ["*"],
@@ -376,6 +432,7 @@ async function ensurePermissions(roleMap: Record<RoleName, string>) {
     }
   }
 }
+
 
 // ----------------- 3. Flows -----------------
 //

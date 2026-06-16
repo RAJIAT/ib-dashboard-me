@@ -552,7 +552,24 @@ export async function addRequestNote(
   }
   const r = await getRequest(requestId);
   if (!r) throw new Error("Request not found");
+  // Fan-out: notify the request's current owner (skip self-notes).
+  try {
+    const row = await dxItems<DxRequest>("requests").get(requestId, "id,agent.id");
+    const ownerId = row && typeof row.agent === "object" ? row.agent?.id : (row?.agent as string | undefined);
+    if (ownerId && ownerId !== me.id) {
+      await createNotification({
+        recipient: ownerId,
+        kind: input.kind === "missing" ? "missing_requested" : "note_added",
+        title: input.kind === "missing" ? `Re-upload requested on ${r.id}` : `New note on ${r.id}`,
+        body: input.text.slice(0, 240),
+        link: `/requests/${r.id}`,
+      });
+    }
+  } catch (e) {
+    console.warn("[notify] addRequestNote fan-out failed", e);
+  }
   return r;
+
 }
 
 export async function resolveRequestNote(requestId: string, noteId: string): Promise<InsuranceRequest> {

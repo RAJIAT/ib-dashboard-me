@@ -223,6 +223,27 @@ export function AgentFormDialog({
             </Field>
           </div>
 
+          {((lockedRole ?? values.role) === "agent") && (
+            <Field label={t.agents.supervisor ?? "Supervisor"}>
+              <select
+                value={values.supervisorId ?? ""}
+                onChange={(e) => setValues((v) => ({ ...v, supervisorId: e.target.value }))}
+                className="h-11 w-full rounded-xl border border-input bg-surface px-3 text-sm text-foreground"
+              >
+                <option value="">{t.agents.unassigned ?? "— Unassigned —"}</option>
+                {supervisors
+                  .filter((s) => s.active && (!values.branch || s.branch === values.branch))
+                  .map((s) => (
+                    // Value is the Directus user UUID when available, so the
+                    // backend receives the correct relational id (not the agent code).
+                    <option key={s.userId ?? s.id} value={s.userId ?? s.id}>
+                      {s.name} · {s.id}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          )}
+
           {((lockedRole ?? values.role) === "agent") && ((lockedStaffType ?? values.staffType) === "sales") && (
             <Field label={t.agents.assignedUnderwriter ?? "Assigned Underwriter"}>
               <select
@@ -234,7 +255,11 @@ export function AgentFormDialog({
                 {allAgents
                   .filter((a) => a.role === "agent" && a.staffType === "underwriter" && a.active && a.branch === values.branch)
                   .map((a) => (
-                    <option key={a.id} value={a.id}>{a.name} · {a.id}</option>
+                    // Value is the Directus user UUID when available, mirroring the
+                    // supervisor dropdown so backend stores a UUID, not agent_code.
+                    <option key={a.userId ?? a.id} value={a.userId ?? a.id}>
+                      {a.name} · {a.id}
+                    </option>
                   ))}
               </select>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -242,6 +267,7 @@ export function AgentFormDialog({
               </p>
             </Field>
           )}
+
 
           {error && <p className="text-sm font-medium text-destructive">{error}</p>}
 

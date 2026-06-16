@@ -119,6 +119,21 @@ function RequestDetails() {
     const refreshRequest = () => {
       getRequest(id).then((r) => {
         if (!alive || !r) { if (alive) setLoading(false); return; }
+        // Ownership gate: agents can only see requests they own or originated.
+        // Admin and supervisor bypass this gate (supervisor scope is enforced by branch).
+        if (user.role === "agent" && user.agentId) {
+          const owns = r.agentId === user.agentId || r.originAgentId === user.agentId;
+          if (!owns) {
+            toast.error("You don't have access to this request");
+            navigate({ to: "/agent" });
+            return;
+          }
+        }
+        if (user.role === "supervisor" && user.branch && r.branch !== user.branch) {
+          toast.error("You don't have access to this request");
+          navigate({ to: "/admin" });
+          return;
+        }
         const sig = reqSignature(r);
         if (sig !== lastSig) {
           // Notify the agent if the customer just uploaded missing items.
@@ -140,6 +155,7 @@ function RequestDetails() {
         setLoading(false);
       }).catch(() => { if (alive) setLoading(false); });
     };
+
     refreshRequest();
     const unsubscribe = subscribeRequests(refreshRequest);
 
@@ -320,24 +336,38 @@ function RequestDetails() {
                   </div>
                 </div>
               </div>
-              <label className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-muted-foreground">{t.details.changeStatus}</span>
-                <span className="relative">
-                  <select
-                    value={req.status}
-                    onChange={(e) => setStatus(e.target.value as RequestStatus, "select")}
-                    disabled={saving}
-                    className="h-10 rounded-xl border border-input bg-surface px-3 pe-9 text-sm font-medium text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {(["new", "processing", "sold", "rejected", "reupload"] as RequestStatus[]).map((s) => (
-                      <option key={s} value={s}>{t.status[s]}</option>
-                    ))}
-                  </select>
-                  {savingAction === "select" && (
-                    <Loader2 className="pointer-events-none absolute end-2 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                  )}
-                </span>
-              </label>
+              {/* Status change is restricted: only admin, supervisor, or
+                  underwriter agents may change status. Sales agents and
+                  agents who are not the request owner see a read-only badge. */}
+              {(() => {
+                const isOwner = !!user?.agentId && req.agentId === user.agentId;
+                const canChangeStatus =
+                  role === "admin" ||
+                  role === "supervisor" ||
+                  (role === "agent" && isUnderwriter && isOwner);
+                if (!canChangeStatus) return null;
+                return (
+                  <label className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-muted-foreground">{t.details.changeStatus}</span>
+                    <span className="relative">
+                      <select
+                        value={req.status}
+                        onChange={(e) => setStatus(e.target.value as RequestStatus, "select")}
+                        disabled={saving}
+                        className="h-10 rounded-xl border border-input bg-surface px-3 pe-9 text-sm font-medium text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {(["new", "processing", "sold", "rejected", "reupload"] as RequestStatus[]).map((s) => (
+                          <option key={s} value={s}>{t.status[s]}</option>
+                        ))}
+                      </select>
+                      {savingAction === "select" && (
+                        <Loader2 className="pointer-events-none absolute end-2 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                      )}
+                    </span>
+                  </label>
+                );
+              })()}
+
             </div>
           </div>
 

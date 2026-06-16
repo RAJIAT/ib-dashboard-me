@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -8,12 +8,21 @@ import { login } from "@/services/api";
 
 
 export const Route = createFileRoute("/login")({
+  // Only accept same-origin relative paths as `redirect` to prevent open-redirect abuse.
+  validateSearch: (raw: Record<string, unknown>) => {
+    const r = typeof raw.redirect === "string" ? raw.redirect : "";
+    const safe = r.startsWith("/") && !r.startsWith("//") ? r : "";
+    return { redirect: safe || undefined };
+  },
   component: LoginPage,
 });
+
 
 function LoginPage() {
   const { t } = useLang();
   const navigate = useNavigate();
+  const { redirect } = useSearch({ from: "/login" });
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -36,7 +45,9 @@ function LoginPage() {
     setLoading(true);
     try {
       const u = await login(finalEmail, finalPassword);
-      navigate({ to: u.role === "admin" || u.role === "supervisor" ? "/admin" : "/agent" });
+      const dest = redirect ?? (u.role === "admin" || u.role === "supervisor" ? "/admin" : "/agent");
+      navigate({ to: dest });
+
     } catch (err) {
       // Surface the actual backend message so prod issues (CORS, wrong URL,
       // missing /users/me permissions) are visible instead of being masked

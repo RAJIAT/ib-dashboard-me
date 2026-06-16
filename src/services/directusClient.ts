@@ -100,27 +100,39 @@ export function setCachedMe(u: DirectusUser | null) {
 // Token refresh
 // ---------------------------------------------------------------------------
 
+let refreshInFlight: Promise<TokenSet | null> | null = null;
 async function refresh(): Promise<TokenSet | null> {
+  // Dedupe concurrent refresh calls — Directus rotates and invalidates the
+  // old refresh token on each /auth/refresh, so simultaneous callers would
+  // race and all but the first would fail.
+  if (refreshInFlight) return refreshInFlight;
   const t = getTokens();
   if (!t || !URL_BASE_RAW) return null;
-  const res = await fetch(`${URL_BASE_RAW}/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: t.refresh_token, mode: "json" }),
-  });
-  if (!res.ok) {
-    setTokens(null);
-    setCachedMe(null);
-    return null;
-  }
-  const j = (await res.json()) as { data: { access_token: string; refresh_token: string; expires: number } };
-  const next: TokenSet = {
-    access_token: j.data.access_token,
-    refresh_token: j.data.refresh_token,
-    expires_at: Date.now() + j.data.expires - 30_000,
-  };
-  setTokens(next);
-  return next;
+  refreshInFlight = (async (): Promise<TokenSet | null> => {
+    try {
+      const res = await fetch(`${URL_BASE_RAW}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: t.refresh_token, mode: "json" }),
+      });
+      if (!res.ok) {
+        setTokens(null);
+        setCachedMe(null);
+        return null;
+      }
+      const j = (await res.json()) as { data: { access_token: string; refresh_token: string; expires: number } };
+      const next: TokenSet = {
+        access_token: j.data.access_token,
+        refresh_token: j.data.refresh_token,
+        expires_at: Date.now() + j.data.expires - 30_000,
+      };
+      setTokens(next);
+      return next;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
 }
 
 async function ensureFreshToken(): Promise<string | null> {
@@ -129,6 +141,7 @@ async function ensureFreshToken(): Promise<string | null> {
   if (Date.now() >= t.expires_at) t = await refresh();
   return t?.access_token ?? null;
 }
+
 
 // ---------------------------------------------------------------------------
 // Generic JSON request
@@ -236,10 +249,18 @@ export async function dxMe(): Promise<DirectusUser | null> {
     const me = await dxRequest<{ data: DirectusUser }>(`/users/me?fields=${ME_FIELDS}`);
     setCachedMe(me.data);
     return me.data;
-  } catch {
+  } catch (e) {
+    // 401/403 means the session is no longer valid (deactivated/deleted/role changed).
+    // Clear local tokens so the UI stops believing it's signed in.
+    const err = e as DirectusError;
+    if (err && (err.status === 401 || err.status === 403)) {
+      setTokens(null);
+      setCachedMe(null);
+    }
     return null;
   }
 }
+
 
 export function dxIsLoggedIn(): boolean {
   return !!getTokens();

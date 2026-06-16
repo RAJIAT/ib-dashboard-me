@@ -31,12 +31,13 @@ function AdminAgents() {
   const [user, setUser] = useState<AuthUser | null>(() => getCurrentUser());
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
-  const initialTab = ((): TabKey => {
-    if (typeof window === "undefined") return "underwriter";
+  const readTabFromUrl = (): TabKey | null => {
+    if (typeof window === "undefined") return null;
     const q = new URLSearchParams(window.location.search).get("tab");
     if (q === "supervisor" || q === "underwriter" || q === "sales") return q;
-    return user?.role === "admin" ? "supervisor" : "underwriter";
-  })();
+    return null;
+  };
+  const initialTab = (readTabFromUrl() ?? (user?.role === "admin" ? "supervisor" : "underwriter")) as TabKey;
   const [tab, setTabState] = useState<TabKey>(initialTab);
   const setTab = (k: TabKey) => {
     setTabState(k);
@@ -46,6 +47,18 @@ function AdminAgents() {
       window.history.replaceState(null, "", url.toString());
     }
   };
+
+  // Sync the active tab when the user navigates back/forward.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPop = () => {
+      const next = readTabFromUrl();
+      if (next) setTabState(next);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   const [branchFilter, setBranchFilter] = useState<string>("");
   const [dialog, setDialog] = useState<{ open: boolean; mode: "create" | "edit"; target?: Agent }>({
     open: false, mode: "create",

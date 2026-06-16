@@ -552,7 +552,24 @@ export async function addRequestNote(
   }
   const r = await getRequest(requestId);
   if (!r) throw new Error("Request not found");
+  // Fan-out: notify the request's current owner (skip self-notes).
+  try {
+    const row = await dxItems<DxRequest>("requests").get(requestId, "id,agent.id");
+    const ownerId = row && typeof row.agent === "object" ? row.agent?.id : (row?.agent as string | undefined);
+    if (ownerId && ownerId !== me.id) {
+      await createNotification({
+        recipient: ownerId,
+        kind: input.kind === "missing" ? "request_status" : "info",
+        title: input.kind === "missing" ? `Re-upload requested on ${r.id}` : `New note on ${r.id}`,
+        body: input.text.slice(0, 240),
+        link: `/requests/${r.id}`,
+      });
+    }
+  } catch (e) {
+    console.warn("[notify] addRequestNote fan-out failed", e);
+  }
   return r;
+
 }
 
 export async function resolveRequestNote(requestId: string, noteId: string): Promise<InsuranceRequest> {
@@ -622,8 +639,19 @@ export async function createAgent(input: {
   password?: string;
   assignedUnderwriterId?: string;
 }): Promise<Agent> {
+  // Client-side role guard mirroring demo behavior. The Directus policy on
+  // /users/POST should also enforce this server-side; this check just
+  // produces a clean error before the network round-trip.
+  const me = getCurrentUser();
+  if (me?.role === "supervisor" && input.role === "supervisor") {
+    throw new Error("Supervisors cannot create other supervisors.");
+  }
+  if (me?.role === "agent") {
+    throw new Error("Agents cannot create users.");
+  }
   if (!input.email) throw new Error("Email is required");
   if (!input.password || input.password.length < 6) throw new Error("Password (min 6 chars) is required");
+
   const branchId = input.branch ? await branchCodeToId(input.branch) : null;
   const [first, ...rest] = input.name.split(" ");
   // Look up the Directus "App User" role id to attach to the new user.
@@ -669,7 +697,17 @@ export async function createAgent(input: {
   try {
     const created = await dxUsers().create(payload);
     invalidateUsers();
+    // If the new user is pending approval, notify admins to act.
+    if ((created as DxUserFull).pending_approval) {
+      await notifyAdmins({
+        kind: "user_pending",
+        title: `New ${input.role ?? "agent"} pending approval`,
+        body: `${input.name} (${input.email})`,
+        link: `/agents`,
+      });
+    }
     return userToAgent(created as DxUserFull);
+
   } catch (e) {
     const msg = (e as Error).message || "";
     if (/forbidden|permission|403/i.test(msg)) {
@@ -757,8 +795,20 @@ export async function reassignRequest(requestId: string, newAgentId: string): Pr
   await dxReassignRequest(requestId, target.id);
   const r = await getRequest(requestId);
   if (!r) throw new Error("Request not found after reassign");
+  // Notify the new owner so they see the assignment immediately.
+  const me = getCurrentUser();
+  if (target.id !== me?.id) {
+    await createNotification({
+      recipient: target.id,
+      kind: "request_status",
+      title: `Request ${r.id} assigned to you`,
+      body: `Branch ${r.branch} · status ${r.status}`,
+      link: `/requests/${r.id}`,
+    });
+  }
   return r;
 }
+
 
 // ---------------------------------------------------------------------------
 // Quotes (underwriter uploads)
@@ -794,8 +844,22 @@ export async function addQuotesToRequest(requestId: string, files: File[]): Prom
   }
   const r = await getRequest(requestId);
   if (!r) throw new Error("Request not found");
+  // Notify the sales origin agent that a quote arrived.
+  if (req) {
+    const origin = req.origin_agent && typeof req.origin_agent === "object" ? req.origin_agent : null;
+    if (origin && origin.id !== me.id) {
+      await createNotification({
+        recipient: origin.id,
+        kind: "request_status",
+        title: `Quote uploaded on ${r.id}`,
+        body: `${files.length} file${files.length === 1 ? "" : "s"} attached`,
+        link: `/requests/${r.id}`,
+      });
+    }
+  }
   return r;
 }
+
 
 export async function removeQuoteFromRequest(requestId: string, quoteId: string): Promise<InsuranceRequest> {
   const me = getCurrentUser();
@@ -829,8 +893,15 @@ export async function requestAgentRemoval(agentId: string, reason: string): Prom
     await dxUsers().update(u.id, { pending_approval: true });
   }
   invalidateUsers();
+  await notifyAdmins({
+    kind: "removal_requested",
+    title: `Removal requested: ${[u.first_name, u.last_name].filter(Boolean).join(" ") || u.email}`,
+    body: reason ? reason.slice(0, 240) : undefined,
+    link: `/admin`,
+  });
   return userToAgent({ ...u, pending_approval: true });
 }
+
 
 export async function approveAgentRemoval(agentId: string): Promise<void> {
   const users = await loadUsers();
@@ -877,6 +948,34 @@ function notifToApp(n: DxNotification): AppNotification {
   };
 }
 
+async function createNotification(input: {
+  recipient: string;
+  kind: AppNotification["kind"];
+  title: string;
+  body?: string;
+  link?: string;
+}): Promise<void> {
+  try {
+    await dxItems("notifications").create({
+      recipient: input.recipient,
+      kind: input.kind,
+      title: input.title,
+      body: input.body ?? null,
+      link: input.link ?? null,
+      read: false,
+    });
+  } catch (e) {
+    // Notification failure must never break the underlying mutation.
+    console.warn("[directus] failed to create notification", e);
+  }
+}
+
+async function notifyAdmins(input: { kind: AppNotification["kind"]; title: string; body?: string; link?: string }): Promise<void> {
+  const users = await loadUsers();
+  const admins = users.filter((u) => u.app_role === "admin");
+  await Promise.all(admins.map((a) => createNotification({ recipient: a.id, ...input })));
+}
+
 export async function getNotifications(): Promise<AppNotification[]> {
   const me = getCurrentUser();
   if (!me) return [];
@@ -893,6 +992,7 @@ export function listNotificationsFor(userId: string): AppNotification[] {
   void userId;
   return [];
 }
+
 
 export async function markNotificationRead(id: string): Promise<void> {
   await dxItems("notifications").update(id, { read: true });

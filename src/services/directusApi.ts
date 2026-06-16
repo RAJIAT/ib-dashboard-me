@@ -834,8 +834,22 @@ export async function addQuotesToRequest(requestId: string, files: File[]): Prom
   }
   const r = await getRequest(requestId);
   if (!r) throw new Error("Request not found");
+  // Notify the sales origin agent that a quote arrived.
+  if (req) {
+    const origin = req.origin_agent && typeof req.origin_agent === "object" ? req.origin_agent : null;
+    if (origin && origin.id !== me.id) {
+      await createNotification({
+        recipient: origin.id,
+        kind: "request_status",
+        title: `Quote uploaded on ${r.id}`,
+        body: `${files.length} file${files.length === 1 ? "" : "s"} attached`,
+        link: `/requests/${r.id}`,
+      });
+    }
+  }
   return r;
 }
+
 
 export async function removeQuoteFromRequest(requestId: string, quoteId: string): Promise<InsuranceRequest> {
   const me = getCurrentUser();

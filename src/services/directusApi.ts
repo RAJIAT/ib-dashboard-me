@@ -559,7 +559,7 @@ export async function addRequestNote(
     if (ownerId && ownerId !== me.id) {
       await createNotification({
         recipient: ownerId,
-        kind: input.kind === "missing" ? "missing_requested" : "note_added",
+        kind: input.kind === "missing" ? "request_status" : "info",
         title: input.kind === "missing" ? `Re-upload requested on ${r.id}` : `New note on ${r.id}`,
         body: input.text.slice(0, 240),
         link: `/requests/${r.id}`,

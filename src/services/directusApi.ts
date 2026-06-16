@@ -603,11 +603,12 @@ export async function appendAttachmentsToRequest(
 
 export async function getAgents(): Promise<Agent[]> {
   const users = await loadUsers(true);
-  return users.map(userToAgent);
+  // Admins are not "agents/offices"; exclude them from the agents list.
+  return users.filter((u) => u.app_role !== "admin").map(userToAgent);
 }
 
 export function listAgents(): Agent[] {
-  return (userCache ?? []).map(userToAgent);
+  return (userCache ?? []).filter((u) => u.app_role !== "admin").map(userToAgent);
 }
 
 export async function createAgent(input: {

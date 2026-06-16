@@ -249,10 +249,18 @@ export async function dxMe(): Promise<DirectusUser | null> {
     const me = await dxRequest<{ data: DirectusUser }>(`/users/me?fields=${ME_FIELDS}`);
     setCachedMe(me.data);
     return me.data;
-  } catch {
+  } catch (e) {
+    // 401/403 means the session is no longer valid (deactivated/deleted/role changed).
+    // Clear local tokens so the UI stops believing it's signed in.
+    const err = e as DirectusError;
+    if (err && (err.status === 401 || err.status === 403)) {
+      setTokens(null);
+      setCachedMe(null);
+    }
     return null;
   }
 }
+
 
 export function dxIsLoggedIn(): boolean {
   return !!getTokens();

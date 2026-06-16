@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bell, Check } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import {
-  getCurrentUser, listNotificationsFor, markAllNotificationsRead, markNotificationRead,
+  getCurrentUser, getNotifications, markAllNotificationsRead, markNotificationRead,
   subscribeNotifications, type AppNotification,
 } from "@/services/api";
 import { useLang } from "@/i18n/LanguageProvider";
@@ -16,7 +16,7 @@ export function NotificationBell() {
   const refresh = () => {
     const me = getCurrentUser();
     if (!me) { setItems([]); return; }
-    setItems(listNotificationsFor(me.id).slice(0, 25));
+    getNotifications().then((list) => setItems(list.slice(0, 25))).catch(() => {});
   };
 
   useEffect(() => {

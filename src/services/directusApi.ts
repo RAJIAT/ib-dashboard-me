@@ -725,12 +725,19 @@ export async function updateAgent(
 }
 
 export async function approveAgent(id: string): Promise<Agent> {
-  const updated = await dxUsers().update(id, { app_active: true, pending_approval: false });
+  const users = await loadUsers();
+  const u = users.find((x) => x.id === id || x.agent_code === id);
+  if (!u) throw new Error("Agent not found");
+  const updated = await dxUsers().update(u.id, { app_active: true, pending_approval: false });
   invalidateUsers();
   return userToAgent(updated as DxUserFull);
 }
 
 export async function deleteAgent(id: string): Promise<void> {
+  const me = getCurrentUser();
+  if (me?.role === "supervisor") {
+    throw new Error("Supervisors must request removal from the admin");
+  }
   const users = await loadUsers();
   const u = users.find((x) => x.id === id || x.agent_code === id);
   if (!u) throw new Error("Agent not found");
@@ -791,6 +798,16 @@ export async function addQuotesToRequest(requestId: string, files: File[]): Prom
 }
 
 export async function removeQuoteFromRequest(requestId: string, quoteId: string): Promise<InsuranceRequest> {
+  const me = getCurrentUser();
+  if (!me) throw new Error("Not authenticated");
+  // Ownership check: only admin or the uploader can remove a quote.
+  if (me.role !== "admin") {
+    const row = await dxItems<DxRequestFile>("request_files").get(quoteId, "id,kind,uploaded_by");
+    const uploaderId = row && typeof row.uploaded_by === "object" ? row.uploaded_by?.id : (row?.uploaded_by as string | undefined);
+    if (!row || row.kind !== "quote" || uploaderId !== me.id) {
+      throw new Error("Not allowed: you can only remove your own quotes");
+    }
+  }
   await dxItems("request_files").remove(quoteId);
   const r = await getRequest(requestId);
   if (!r) throw new Error("Request not found");
@@ -882,12 +899,15 @@ export async function markNotificationRead(id: string): Promise<void> {
 }
 
 export async function markAllNotificationsRead(userId: string): Promise<void> {
-  const rows = await dxItems<DxNotification>("notifications").list({
-    filter: { recipient: { _eq: userId }, read: { _eq: false } },
-    fields: "id",
-    limit: -1,
+  // Single bulk PATCH using a filter avoids N round-trips.
+  const { dxRequest } = await import("./directusClient");
+  await dxRequest("/items/notifications", {
+    method: "PATCH",
+    body: JSON.stringify({
+      query: { filter: { recipient: { _eq: userId }, read: { _eq: false } } },
+      data: { read: true },
+    }),
   });
-  await Promise.all(rows.map((n) => dxItems("notifications").update(n.id, { read: true })));
 }
 
 // ---------------------------------------------------------------------------

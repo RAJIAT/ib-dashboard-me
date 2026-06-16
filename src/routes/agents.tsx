@@ -173,9 +173,13 @@ function AdminAgents() {
   };
 
   const onApprove = async (a: Agent) => {
-    await approveAgent(a.id);
-    toast.success(t.agents.updated);
-    await refresh();
+    try {
+      await approveAgent(a.id);
+      toast.success(t.agents.updated);
+      await refresh();
+    } catch (e: any) {
+      toast.error(e?.message ?? t.agents.saveFailed);
+    }
   };
 
   const onDelete = (a: Agent) => setConfirmTarget(a);
@@ -385,9 +389,15 @@ function AdminAgents() {
                   <Check className="h-4 w-4" />
                 </IconBtn>
               )}
-              <IconBtn label={t.agents.edit} onClick={() => setDialog({ open: true, mode: "edit", target: a })}>
-                <Pencil className="h-4 w-4" />
-              </IconBtn>
+              {isAdminCreated(a) ? (
+                <IconBtn disabledLook label={t.agents.noEditAdminCreated} onClick={() => toast.error(t.agents.noEditAdminCreated)}>
+                  <Pencil className="h-4 w-4" />
+                </IconBtn>
+              ) : (
+                <IconBtn label={t.agents.edit} onClick={() => setDialog({ open: true, mode: "edit", target: a })}>
+                  <Pencil className="h-4 w-4" />
+                </IconBtn>
+              )}
               {!isSelf(a) && !isAdminCreated(a) && (
                 <IconBtn label={a.active ? t.agents.suspend : t.agents.activate} onClick={() => onToggle(a)}>
                   <Power className="h-4 w-4" />
@@ -446,6 +456,7 @@ function AdminAgents() {
           try {
             await requestAgentRemoval(removalTarget.id, reason);
             toast.success(t.agents.removalSent);
+            await refresh();
           } catch (e: any) {
             toast.error(e?.message ?? t.agents.saveFailed);
           }

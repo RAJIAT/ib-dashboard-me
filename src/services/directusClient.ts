@@ -10,6 +10,14 @@ export const URL_BASE = URL_BASE_RAW;
 export const DIRECTUS_ENABLED =
   String(import.meta.env.VITE_USE_DIRECTUS).toLowerCase() === "true" && !!URL_BASE_RAW;
 
+if (typeof window !== "undefined") {
+  // Visible in DevTools console — helps diagnose prod misconfig.
+  // eslint-disable-next-line no-console
+  console.info(
+    `[directus] enabled=${DIRECTUS_ENABLED} url=${URL_BASE_RAW || "(empty)"} VITE_USE_DIRECTUS=${import.meta.env.VITE_USE_DIRECTUS ?? "(unset)"}`,
+  );
+}
+
 const STORAGE_KEY = "aib:directus:tokens:v1";
 const ME_KEY = "aib:directus:me:v1";
 

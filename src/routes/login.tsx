@@ -21,6 +21,8 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const { t } = useLang();
   const navigate = useNavigate();
+  const { redirect } = useSearch({ from: "/login" });
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");

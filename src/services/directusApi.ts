@@ -888,6 +888,34 @@ function notifToApp(n: DxNotification): AppNotification {
   };
 }
 
+async function createNotification(input: {
+  recipient: string;
+  kind: AppNotification["kind"];
+  title: string;
+  body?: string;
+  link?: string;
+}): Promise<void> {
+  try {
+    await dxItems("notifications").create({
+      recipient: input.recipient,
+      kind: input.kind,
+      title: input.title,
+      body: input.body ?? null,
+      link: input.link ?? null,
+      read: false,
+    });
+  } catch (e) {
+    // Notification failure must never break the underlying mutation.
+    console.warn("[directus] failed to create notification", e);
+  }
+}
+
+async function notifyAdmins(input: { kind: AppNotification["kind"]; title: string; body?: string; link?: string }): Promise<void> {
+  const users = await loadUsers();
+  const admins = users.filter((u) => u.app_role === "admin");
+  await Promise.all(admins.map((a) => createNotification({ recipient: a.id, ...input })));
+}
+
 export async function getNotifications(): Promise<AppNotification[]> {
   const me = getCurrentUser();
   if (!me) return [];
@@ -904,6 +932,7 @@ export function listNotificationsFor(userId: string): AppNotification[] {
   void userId;
   return [];
 }
+
 
 export async function markNotificationRead(id: string): Promise<void> {
   await dxItems("notifications").update(id, { read: true });

@@ -785,8 +785,20 @@ export async function reassignRequest(requestId: string, newAgentId: string): Pr
   await dxReassignRequest(requestId, target.id);
   const r = await getRequest(requestId);
   if (!r) throw new Error("Request not found after reassign");
+  // Notify the new owner so they see the assignment immediately.
+  const me = getCurrentUser();
+  if (target.id !== me?.id) {
+    await createNotification({
+      recipient: target.id,
+      kind: "request_status",
+      title: `Request ${r.id} assigned to you`,
+      body: `Branch ${r.branch} · status ${r.status}`,
+      link: `/requests/${r.id}`,
+    });
+  }
   return r;
 }
+
 
 // ---------------------------------------------------------------------------
 // Quotes (underwriter uploads)

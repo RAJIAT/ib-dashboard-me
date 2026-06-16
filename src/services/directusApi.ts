@@ -711,8 +711,13 @@ export async function updateAgent(
   if (patch.active !== undefined) payload.app_active = patch.active;
   if (patch.role !== undefined) payload.app_role = patch.role;
   if (patch.staffType !== undefined) payload.staff_type = patch.staffType;
-  if (patch.supervisorId !== undefined) payload.supervisor = patch.supervisorId;
-  if (patch.assignedUnderwriterId !== undefined) payload.assigned_underwriter = patch.assignedUnderwriterId;
+  const resolveUserUuid2 = (v: string | null): string | null => {
+    if (!v) return null;
+    const found = users.find((u) => u.id === v || u.agent_code === v);
+    return found?.id ?? null;
+  };
+  if (patch.supervisorId !== undefined) payload.supervisor = resolveUserUuid2(patch.supervisorId);
+  if (patch.assignedUnderwriterId !== undefined) payload.assigned_underwriter = resolveUserUuid2(patch.assignedUnderwriterId);
   if (patch.password) payload.password = patch.password;
   const updated = await dxUsers().update(user.id, payload);
   invalidateUsers();

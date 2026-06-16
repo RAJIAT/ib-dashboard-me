@@ -277,6 +277,7 @@ export const translations = {
       tabSales: "المبيعات",
       addUnderwriter: "إضافة مكتتب",
       addSales: "إضافة موظف مبيعات",
+      supervisor: "المشرف",
       assignedUnderwriter: "الأندررايتر المعيّن",
       assignedUnderwriterHint: "كل الطلبات اللي يرفعها هذا السيلز ستُحوَّل لهذا الأندررايتر فقط.",
       unassigned: "— غير معيّن —",

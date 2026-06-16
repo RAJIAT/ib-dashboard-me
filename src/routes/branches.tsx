@@ -8,7 +8,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useLang } from "@/i18n/LanguageProvider";
 import {
   getBranches, createBranch, updateBranch, deleteBranch,
-  getCurrentUser, subscribeBranches, listBranchObjects,
+  getCurrentUser, subscribeBranches,
   type AuthUser,
 } from "@/services/api";
 import type { DxBranch } from "@/services/directus";
@@ -41,6 +41,12 @@ function BranchesPage() {
   const [saving, setSaving] = useState(false);
   const [toDelete, setToDelete] = useState<DxBranch | null>(null);
 
+  const refresh = () => {
+    return getBranches()
+      .then((rows) => { setItems(rows); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
+
   useEffect(() => {
     const u = getCurrentUser();
     if (!u || u.role !== "admin") {
@@ -48,15 +54,10 @@ function BranchesPage() {
       return;
     }
     setUser(u);
-    const refresh = () => {
-      getBranches()
-        .then((rows) => { setItems(rows); setLoading(false); })
-        .catch(() => setLoading(false));
-    };
     refresh();
-    setItems(listBranchObjects());
-    const off = subscribeBranches(() => setItems(listBranchObjects()));
+    const off = subscribeBranches(() => { refresh(); });
     return () => off();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   const openAdd = () => { setForm(EMPTY); setAdding(true); setEditing(null); };
@@ -88,6 +89,7 @@ function BranchesPage() {
         toast.success(dir === "rtl" ? "تم إنشاء الفرع" : "Branch created");
       }
       closeForm();
+      await refresh();
     } catch (e: any) {
       toast.error(e?.message ?? (dir === "rtl" ? "فشل الحفظ" : "Save failed"));
     } finally {
@@ -101,6 +103,7 @@ function BranchesPage() {
       await deleteBranch(toDelete.id);
       toast.success(dir === "rtl" ? "تم حذف الفرع" : "Branch deleted");
       setToDelete(null);
+      await refresh();
     } catch (e: any) {
       toast.error(e?.message ?? (dir === "rtl" ? "فشل الحذف" : "Delete failed"));
     }

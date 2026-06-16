@@ -603,11 +603,12 @@ export async function appendAttachmentsToRequest(
 
 export async function getAgents(): Promise<Agent[]> {
   const users = await loadUsers(true);
-  return users.map(userToAgent);
+  // Admins are not "agents/offices"; exclude them from the agents list.
+  return users.filter((u) => u.app_role !== "admin").map(userToAgent);
 }
 
 export function listAgents(): Agent[] {
-  return (userCache ?? []).map(userToAgent);
+  return (userCache ?? []).filter((u) => u.app_role !== "admin").map(userToAgent);
 }
 
 export async function createAgent(input: {
@@ -629,12 +630,20 @@ export async function createAgent(input: {
   // We rely on the app_role field for our own permission filters, but Directus
   // still requires a role assignment for app_access.
   const appRoleName = input.role === "supervisor" ? "Supervisor" : "Agent";
-  const roles = await dxItems<{ id: string; name: string }>("directus_roles").list({
-    filter: { name: { _eq: appRoleName } },
-    fields: "id,name",
-    limit: 1,
-  });
-  const dxRoleId = roles[0]?.id;
+  let dxRoleId: string | undefined;
+  try {
+    const roles = await dxItems<{ id: string; name: string }>("directus_roles").list({
+      filter: { name: { _eq: appRoleName } },
+      fields: "id,name",
+      limit: 1,
+    });
+    dxRoleId = roles[0]?.id;
+  } catch (e) {
+    // Non-admin Directus policies can't read directus_roles. Continue without —
+    // the create call below will fail with a clearer error if the policy also
+    // forbids creating users.
+    console.warn("[directus] could not look up Directus role; continuing without role assignment", e);
+  }
   const payload: Record<string, unknown> = {
     email: input.email,
     password: input.password,
@@ -650,9 +659,19 @@ export async function createAgent(input: {
     pending_approval: false,
   };
   if (dxRoleId) payload.role = dxRoleId;
-  const created = await dxUsers().create(payload);
-  invalidateUsers();
-  return userToAgent(created as DxUserFull);
+  try {
+    const created = await dxUsers().create(payload);
+    invalidateUsers();
+    return userToAgent(created as DxUserFull);
+  } catch (e) {
+    const msg = (e as Error).message || "";
+    if (/forbidden|permission|403/i.test(msg)) {
+      throw new Error(
+        `Directus denied user creation (${msg}). The signed-in admin must be assigned a Directus policy with admin_access=true (or with create permission on directus_users). Run scripts/directus-bootstrap.ts and ensure your admin user is linked to the "Admin" policy via /access.`,
+      );
+    }
+    throw e;
+  }
 }
 
 export async function updateAgent(

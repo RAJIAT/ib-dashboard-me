@@ -124,13 +124,13 @@ function RequestDetails() {
         if (user.role === "agent" && user.agentId) {
           const owns = r.agentId === user.agentId || r.originAgentId === user.agentId;
           if (!owns) {
-            toast.error(t.common?.notAllowed ?? "You don't have access to this request");
+            toast.error("You don't have access to this request");
             navigate({ to: "/agent" });
             return;
           }
         }
         if (user.role === "supervisor" && user.branch && r.branch !== user.branch) {
-          toast.error(t.common?.notAllowed ?? "You don't have access to this request");
+          toast.error("You don't have access to this request");
           navigate({ to: "/admin" });
           return;
         }

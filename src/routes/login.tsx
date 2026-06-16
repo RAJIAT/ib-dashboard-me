@@ -45,7 +45,9 @@ function LoginPage() {
     setLoading(true);
     try {
       const u = await login(finalEmail, finalPassword);
-      navigate({ to: u.role === "admin" || u.role === "supervisor" ? "/admin" : "/agent" });
+      const dest = redirect ?? (u.role === "admin" || u.role === "supervisor" ? "/admin" : "/agent");
+      navigate({ to: dest });
+
     } catch (err) {
       // Surface the actual backend message so prod issues (CORS, wrong URL,
       // missing /users/me permissions) are visible instead of being masked

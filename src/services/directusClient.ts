@@ -10,6 +10,14 @@ export const URL_BASE = URL_BASE_RAW;
 export const DIRECTUS_ENABLED =
   String(import.meta.env.VITE_USE_DIRECTUS).toLowerCase() === "true" && !!URL_BASE_RAW;
 
+if (typeof window !== "undefined") {
+  // Visible in DevTools console — helps diagnose prod misconfig.
+  // eslint-disable-next-line no-console
+  console.info(
+    `[directus] enabled=${DIRECTUS_ENABLED} url=${URL_BASE_RAW || "(empty)"} VITE_USE_DIRECTUS=${import.meta.env.VITE_USE_DIRECTUS ?? "(unset)"}`,
+  );
+}
+
 const STORAGE_KEY = "aib:directus:tokens:v1";
 const ME_KEY = "aib:directus:me:v1";
 
@@ -159,22 +167,55 @@ const ME_FIELDS =
   "id,email,first_name,last_name,app_role,staff_type,agent_code,supervisor,assigned_underwriter,app_active,pending_approval,branch.id,branch.code,branch.name";
 
 export async function dxLogin(email: string, password: string): Promise<DirectusUser> {
-  if (!URL_BASE_RAW) throw new Error("Directus not configured.");
-  const res = await fetch(`${URL_BASE_RAW}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, mode: "json" }),
-  });
-  if (!res.ok) throw new Error("Invalid credentials");
+  if (!URL_BASE_RAW) {
+    throw new Error(
+      "Directus is not configured: VITE_DIRECTUS_URL is empty. Set it at build time and rebuild the portal.",
+    );
+  }
+  let res: Response;
+  try {
+    res = await fetch(`${URL_BASE_RAW}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, mode: "json" }),
+    });
+  } catch (e) {
+    // Network / CORS / DNS failure — fetch rejects without a Response.
+    console.error("[directus] login network error", e);
+    throw new Error(
+      `Cannot reach Directus at ${URL_BASE_RAW}. Check VITE_DIRECTUS_URL, HTTPS, and CORS (CORS_ENABLED + CORS_ORIGIN) on the Directus server.`,
+    );
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.error("[directus] login failed", res.status, text);
+    let msg = `Login failed (${res.status})`;
+    try {
+      const j = JSON.parse(text) as { errors?: Array<{ message?: string }> };
+      const m = j.errors?.[0]?.message;
+      if (m) msg = m;
+    } catch {
+      if (text) msg = text;
+    }
+    throw new Error(msg);
+  }
   const j = (await res.json()) as { data: { access_token: string; refresh_token: string; expires: number } };
   setTokens({
     access_token: j.data.access_token,
     refresh_token: j.data.refresh_token,
     expires_at: Date.now() + j.data.expires - 30_000,
   });
-  const me = await dxRequest<{ data: DirectusUser }>(`/users/me?fields=${ME_FIELDS}`);
-  setCachedMe(me.data);
-  return me.data;
+  try {
+    const me = await dxRequest<{ data: DirectusUser }>(`/users/me?fields=${ME_FIELDS}`);
+    setCachedMe(me.data);
+    return me.data;
+  } catch (e) {
+    console.error("[directus] /users/me failed after successful login", e);
+    const err = e as DirectusError;
+    throw new Error(
+      `Logged in but /users/me failed (${err.status ?? "?"}). The user role likely lacks permission to read app_role / branch / etc. Details: ${err.message ?? String(e)}`,
+    );
+  }
 }
 
 export async function dxLogout() {

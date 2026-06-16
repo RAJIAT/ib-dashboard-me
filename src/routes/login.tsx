@@ -37,8 +37,14 @@ function LoginPage() {
     try {
       const u = await login(finalEmail, finalPassword);
       navigate({ to: u.role === "admin" || u.role === "supervisor" ? "/admin" : "/agent" });
-    } catch {
-      setError(t.auth.invalid);
+    } catch (err) {
+      // Surface the actual backend message so prod issues (CORS, wrong URL,
+      // missing /users/me permissions) are visible instead of being masked
+      // as "invalid credentials".
+      // eslint-disable-next-line no-console
+      console.error("[login] failed", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg || t.auth.invalid);
     } finally {
       setLoading(false);
     }

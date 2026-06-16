@@ -23,6 +23,7 @@ import {
   dxAssetUrl,
   dxReassignRequest,
   dxTriggerRemoval,
+  getCachedMe,
   type DirectusUser,
 } from "./directusClient";
 import type {
@@ -170,11 +171,7 @@ export async function logout(): Promise<void> {
 }
 
 export function getCurrentUser(): AuthUser | null {
-  // Synchronous: relies on cached "me" in directusClient.
-  // Routes call this in render; an async refresh is exposed below.
-  // We read via dynamic import to avoid a circular type dep at runtime.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getCachedMe } = require("./directusClient") as typeof import("./directusClient");
+  // Synchronous: relies on cached "me" persisted by directusClient.
   const m = getCachedMe();
   return m ? userToAuth(m as DxUserFull) : null;
 }

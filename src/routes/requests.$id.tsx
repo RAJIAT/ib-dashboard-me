@@ -119,6 +119,21 @@ function RequestDetails() {
     const refreshRequest = () => {
       getRequest(id).then((r) => {
         if (!alive || !r) { if (alive) setLoading(false); return; }
+        // Ownership gate: agents can only see requests they own or originated.
+        // Admin and supervisor bypass this gate (supervisor scope is enforced by branch).
+        if (user.role === "agent" && user.agentId) {
+          const owns = r.agentId === user.agentId || r.originAgentId === user.agentId;
+          if (!owns) {
+            toast.error(t.common?.notAllowed ?? "You don't have access to this request");
+            navigate({ to: "/agent" });
+            return;
+          }
+        }
+        if (user.role === "supervisor" && user.branch && r.branch !== user.branch) {
+          toast.error(t.common?.notAllowed ?? "You don't have access to this request");
+          navigate({ to: "/admin" });
+          return;
+        }
         const sig = reqSignature(r);
         if (sig !== lastSig) {
           // Notify the agent if the customer just uploaded missing items.
@@ -140,6 +155,7 @@ function RequestDetails() {
         setLoading(false);
       }).catch(() => { if (alive) setLoading(false); });
     };
+
     refreshRequest();
     const unsubscribe = subscribeRequests(refreshRequest);
 

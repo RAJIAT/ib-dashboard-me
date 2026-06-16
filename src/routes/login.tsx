@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -8,8 +8,15 @@ import { login } from "@/services/api";
 
 
 export const Route = createFileRoute("/login")({
+  // Only accept same-origin relative paths as `redirect` to prevent open-redirect abuse.
+  validateSearch: (raw: Record<string, unknown>) => {
+    const r = typeof raw.redirect === "string" ? raw.redirect : "";
+    const safe = r.startsWith("/") && !r.startsWith("//") ? r : "";
+    return { redirect: safe || undefined };
+  },
   component: LoginPage,
 });
+
 
 function LoginPage() {
   const { t } = useLang();

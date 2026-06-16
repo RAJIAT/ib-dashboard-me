@@ -697,7 +697,17 @@ export async function createAgent(input: {
   try {
     const created = await dxUsers().create(payload);
     invalidateUsers();
+    // If the new user is pending approval, notify admins to act.
+    if ((created as DxUserFull).pending_approval) {
+      await notifyAdmins({
+        kind: "user_pending",
+        title: `New ${input.role ?? "agent"} pending approval`,
+        body: `${input.name} (${input.email})`,
+        link: `/agents`,
+      });
+    }
     return userToAgent(created as DxUserFull);
+
   } catch (e) {
     const msg = (e as Error).message || "";
     if (/forbidden|permission|403/i.test(msg)) {

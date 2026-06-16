@@ -893,8 +893,15 @@ export async function requestAgentRemoval(agentId: string, reason: string): Prom
     await dxUsers().update(u.id, { pending_approval: true });
   }
   invalidateUsers();
+  await notifyAdmins({
+    kind: "removal_requested",
+    title: `Removal requested: ${[u.first_name, u.last_name].filter(Boolean).join(" ") || u.email}`,
+    body: reason ? reason.slice(0, 240) : undefined,
+    link: `/admin`,
+  });
   return userToAgent({ ...u, pending_approval: true });
 }
+
 
 export async function approveAgentRemoval(agentId: string): Promise<void> {
   const users = await loadUsers();

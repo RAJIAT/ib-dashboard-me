@@ -96,8 +96,14 @@ export function AgentFormDialog({
     }
   };
 
-  const isSupervisorForm = (lockedRole ?? values.role) === "supervisor";
-  const titleCreate = isSupervisorForm ? t.agents.addSupervisorTitle : t.agents.addTitle;
+  const effectiveRole: AgentRole = lockedRole ?? values.role;
+  const effectiveStaff: StaffType | undefined = lockedStaffType ?? values.staffType;
+  const isSupervisorForm = effectiveRole === "supervisor";
+  const titleCreate = isSupervisorForm
+    ? t.agents.addSupervisorTitle
+    : effectiveStaff === "sales"
+      ? (t.agents.addSalesTitle ?? t.agents.addTitle)
+      : (t.agents.addUnderwriterTitle ?? t.agents.addTitle);
   const titleEdit = isSupervisorForm ? t.agents.editSupervisorTitle : t.agents.editTitle;
 
   return (

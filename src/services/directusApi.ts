@@ -622,8 +622,19 @@ export async function createAgent(input: {
   password?: string;
   assignedUnderwriterId?: string;
 }): Promise<Agent> {
+  // Client-side role guard mirroring demo behavior. The Directus policy on
+  // /users/POST should also enforce this server-side; this check just
+  // produces a clean error before the network round-trip.
+  const me = getCurrentUser();
+  if (me?.role === "supervisor" && input.role === "supervisor") {
+    throw new Error("Supervisors cannot create other supervisors.");
+  }
+  if (me?.role === "agent") {
+    throw new Error("Agents cannot create users.");
+  }
   if (!input.email) throw new Error("Email is required");
   if (!input.password || input.password.length < 6) throw new Error("Password (min 6 chars) is required");
+
   const branchId = input.branch ? await branchCodeToId(input.branch) : null;
   const [first, ...rest] = input.name.split(" ");
   // Look up the Directus "App User" role id to attach to the new user.

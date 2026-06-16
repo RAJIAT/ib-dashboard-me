@@ -109,7 +109,7 @@ function AuditPage() {
   const summary = useMemo(() => entries.length, [entries]);
 
   return (
-    <DashboardShell role={["admin"]} title={t.audit.title}>
+    <DashboardShell role={["admin", "supervisor"]} title={t.audit.title}>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <button

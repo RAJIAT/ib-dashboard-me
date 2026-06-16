@@ -23,6 +23,7 @@ import {
   dxAssetUrl,
   dxReassignRequest,
   dxTriggerRemoval,
+  getCachedMe,
   type DirectusUser,
 } from "./directusClient";
 import type {

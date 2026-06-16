@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Pencil, Plus, Power, Send, Trash2, Upload, Users } from "lucide-react";
 import { toast } from "sonner";
 import { DashboardShell } from "@/components/DashboardShell";
@@ -31,7 +31,21 @@ function AdminAgents() {
   const [user, setUser] = useState<AuthUser | null>(() => getCurrentUser());
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<TabKey>("underwriter");
+  const initialTab = ((): TabKey => {
+    if (typeof window === "undefined") return "underwriter";
+    const q = new URLSearchParams(window.location.search).get("tab");
+    if (q === "supervisor" || q === "underwriter" || q === "sales") return q;
+    return user?.role === "admin" ? "supervisor" : "underwriter";
+  })();
+  const [tab, setTabState] = useState<TabKey>(initialTab);
+  const setTab = (k: TabKey) => {
+    setTabState(k);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", k);
+      window.history.replaceState(null, "", url.toString());
+    }
+  };
   const [branchFilter, setBranchFilter] = useState<string>("");
   const [dialog, setDialog] = useState<{ open: boolean; mode: "create" | "edit"; target?: Agent }>({
     open: false, mode: "create",
@@ -70,43 +84,61 @@ function AdminAgents() {
     });
   }, [allAgents, effectiveTab, branchFilter, isAdmin]);
 
+  const userRef = useRef(user);
+  userRef.current = user;
+  const aliveRef = useRef(true);
+
+  const refresh = useCallback(async () => {
+    const u = userRef.current;
+    if (!u) return;
+    const list = await getAgents();
+    if (!aliveRef.current) return;
+    const visible = u.role === "supervisor" && u.branch
+      ? list.filter((a) => a.branch === u.branch || a.createdByUserId === u.id)
+      : list;
+    setAllAgents(visible);
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
+    aliveRef.current = true;
     const u = getCurrentUser();
     if (!u || (u.role !== "admin" && u.role !== "supervisor")) { navigate({ to: "/login" }); return; }
     setUser(u);
-    let alive = true;
-    const refresh = () => {
-      getAgents().then((list) => {
-        if (!alive) return;
-        const visible = u.role === "supervisor" && u.branch
-          ? list.filter((a) => a.branch === u.branch || a.createdByUserId === u.id)
-          : list;
-        setAllAgents(visible);
-        setLoading(false);
-      });
-    };
+    userRef.current = u;
     refreshCurrentUser().then((fresh) => {
-      if (!alive) return;
+      if (!aliveRef.current) return;
       if (!fresh || (fresh.role !== "admin" && fresh.role !== "supervisor")) { navigate({ to: "/login" }); return; }
       setUser(fresh);
+      userRef.current = fresh;
       getBranches().catch(() => {});
       refresh();
     });
-    const off = subscribeAgents(refresh);
-    return () => { alive = false; off(); };
-  }, [navigate]);
+    const off = subscribeAgents(() => { refresh(); });
+    return () => { aliveRef.current = false; off(); };
+  }, [navigate, refresh]);
 
   const onCreate = async (v: AgentFormValues) => {
+    const effectiveRole = isSupervisor ? "agent" : v.role;
+    const effectiveStaff = (effectiveRole === "agent")
+      ? (v.staffType ?? (effectiveTab === "sales" ? "sales" : "underwriter"))
+      : undefined;
     await createAgent({
       id: v.agentId, name: v.name, email: v.email,
       password: v.password,
       branch: lockedBranch ?? v.branch,
-      role: isSupervisor ? "agent" : v.role,
-      staffType: (v.role === "agent" || isSupervisor) ? (v.staffType ?? (effectiveTab === "sales" ? "sales" : "underwriter")) : undefined,
+      role: effectiveRole,
+      staffType: effectiveStaff,
       supervisorId: v.supervisorId || undefined,
       assignedUnderwriterId: v.assignedUnderwriterId || undefined,
     });
-    toast.success(t.agents.created);
+    const msg = effectiveRole === "supervisor"
+      ? (t.agents.supervisorCreated ?? t.agents.created)
+      : effectiveStaff === "sales"
+        ? (t.agents.salesCreated ?? t.agents.created)
+        : (t.agents.underwriterCreated ?? t.agents.created);
+    toast.success(msg);
+    await refresh();
   };
 
   const onEdit = async (v: AgentFormValues) => {
@@ -123,6 +155,7 @@ function AdminAgents() {
         ...(v.password ? { password: v.password } : {}),
       });
       toast.success(t.agents.updated);
+      await refresh();
     } catch (e: any) {
       toast.error(e?.message ?? t.agents.saveFailed);
       throw e;
@@ -133,6 +166,7 @@ function AdminAgents() {
     try {
       await updateAgent(a.id, { active: !a.active });
       toast.success(t.agents.updated);
+      await refresh();
     } catch (e: any) {
       toast.error(e?.message ?? t.agents.saveFailed);
     }
@@ -141,6 +175,7 @@ function AdminAgents() {
   const onApprove = async (a: Agent) => {
     await approveAgent(a.id);
     toast.success(t.agents.updated);
+    await refresh();
   };
 
   const onDelete = (a: Agent) => setConfirmTarget(a);
@@ -150,10 +185,12 @@ function AdminAgents() {
     try {
       await deleteAgent(confirmTarget.id);
       toast.success(t.agents.deleted);
+      await refresh();
     } catch (e: any) {
       toast.error(e?.message ?? t.agents.saveFailed);
     }
   };
+
 
   const tabConfig: Record<TabKey, { label: string; addLabel: string; emptyLabel: string }> = {
     supervisor: { label: t.agents.tabSupervisors, addLabel: t.agents.addSupervisor, emptyLabel: t.agents.emptySupervisors },

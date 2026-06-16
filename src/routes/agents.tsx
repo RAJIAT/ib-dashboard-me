@@ -31,7 +31,21 @@ function AdminAgents() {
   const [user, setUser] = useState<AuthUser | null>(() => getCurrentUser());
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<TabKey>("underwriter");
+  const initialTab = ((): TabKey => {
+    if (typeof window === "undefined") return "underwriter";
+    const q = new URLSearchParams(window.location.search).get("tab");
+    if (q === "supervisor" || q === "underwriter" || q === "sales") return q;
+    return user?.role === "admin" ? "supervisor" : "underwriter";
+  })();
+  const [tab, setTabState] = useState<TabKey>(initialTab);
+  const setTab = (k: TabKey) => {
+    setTabState(k);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", k);
+      window.history.replaceState(null, "", url.toString());
+    }
+  };
   const [branchFilter, setBranchFilter] = useState<string>("");
   const [dialog, setDialog] = useState<{ open: boolean; mode: "create" | "edit"; target?: Agent }>({
     open: false, mode: "create",
